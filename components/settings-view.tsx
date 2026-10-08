@@ -95,6 +95,7 @@ export function SettingsView() {
         wakeTime,
         aiEnabled: data.settings.aiEnabled,
         strictMode: data.settings.strictMode,
+        banditV2: data.settings.banditV2,
         goalWeekAnswered: data.settings.goalWeekAnswered,
       }),
     );

@@ -209,13 +209,22 @@ final class GuardFlow {
         }
         String picked;
         if (policy.ai.enabled) {
-            // AI: Thompson sampling over what worked for this band at this time of day.
-            String key = band + ":" + GuardPolicy.timeSlot(hourNow());
-            picked = GuardBandit.pick(options, policy.ai.methods.get(key), random);
+            // AI: Thompson sampling over what worked for this band, time of day and
+            // weekday/weekend, leaning away from a method shown very recently (habituation).
+            Calendar now = Calendar.getInstance();
+            picked = GuardBandit.pick(
+                options,
+                policy.ai.methodsAt(band, now),
+                random,
+                GuardState.lastShown(context, "method", options),
+                now.getTimeInMillis(),
+                policy.ai.habituationStrength,
+                policy.ai.habituationRecoveryHours);
         } else {
             picked = GuardState.nextInTurn(context, "band" + band, options);
         }
         if (picked == null) picked = "pause";
+        GuardState.markShown(context, "method", picked, System.currentTimeMillis());
         rec.method = picked;
         switch (picked) {
             case "framing":
@@ -252,9 +261,17 @@ final class GuardFlow {
             for (String kind : kinds) {
                 if (GuardCopy.insight(kind, facts) != null) usable.add(kind);
             }
+            Calendar now = Calendar.getInstance();
             String kind = GuardBandit.pick(
-                usable, policy.ai.framings.get(GuardPolicy.timeSlot(hourNow())), random);
+                usable,
+                policy.ai.framingsAt(now),
+                random,
+                GuardState.lastShown(context, "framing", usable),
+                now.getTimeInMillis(),
+                policy.ai.habituationStrength,
+                policy.ai.habituationRecoveryHours);
             if (kind == null) return null;
+            GuardState.markShown(context, "framing", kind, now.getTimeInMillis());
             rec.framing = kind;
             return GuardCopy.insight(kind, facts);
         }

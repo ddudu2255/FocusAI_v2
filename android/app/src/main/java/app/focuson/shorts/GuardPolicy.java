@@ -61,9 +61,29 @@ final class GuardPolicy {
         int riskExtensionMax = 1;
         int riskOverdraftWaitSec = 10;
         int feedbackEvery = 5;
+        /** Habituation (ai-2): 0 = off. See GuardBandit.freshness. */
+        double habituationStrength = 0;
+        double habituationRecoveryHours = 6;
 
         boolean isRiskHour(int hour) {
             return enabled && riskHours.contains(hour);
+        }
+
+        /**
+         * Method posteriors for this band right now: "band:slot:weekday|weekend" (ai-2),
+         * falling back to "band:slot" (ai-1).
+         */
+        Map<String, double[]> methodsAt(int band, Calendar now) {
+            String slot = timeSlot(now.get(Calendar.HOUR_OF_DAY));
+            Map<String, double[]> row = methods.get(band + ":" + slot + ":" + dayType(now));
+            return row != null ? row : methods.get(band + ":" + slot);
+        }
+
+        /** Framing posteriors right now: "slot:weekday|weekend" (ai-2), falling back to "slot". */
+        Map<String, double[]> framingsAt(Calendar now) {
+            String slot = timeSlot(now.get(Calendar.HOUR_OF_DAY));
+            Map<String, double[]> row = framings.get(slot + ":" + dayType(now));
+            return row != null ? row : framings.get(slot);
         }
 
         /** Before today's first risky hour: suggest keeping budget for later. */
@@ -78,6 +98,12 @@ final class GuardPolicy {
         if (hour >= 11 && hour < 17) return "day";
         if (hour >= 17 && hour < 22) return "evening";
         return "night";
+    }
+
+    /** 토·일은 weekend (same as lib/ai.ts dayType). */
+    static String dayType(Calendar now) {
+        int day = now.get(Calendar.DAY_OF_WEEK);
+        return day == Calendar.SATURDAY || day == Calendar.SUNDAY ? "weekend" : "weekday";
     }
 
     /** Numbers behind the lines ("어제 이 시간엔…", "이번 주 평균보다…"). */
@@ -208,6 +234,11 @@ final class GuardPolicy {
             ai.riskOverdraftWaitSec = Math.max(0, risk.optInt("overdraftWaitSec", ai.riskOverdraftWaitSec));
         }
         ai.feedbackEvery = Math.max(1, json.optInt("feedbackEvery", ai.feedbackEvery));
+        JSONObject habituation = json.optJSONObject("habituation");
+        if (habituation != null) {
+            ai.habituationStrength = Math.max(0, Math.min(1, habituation.optDouble("strength", 0)));
+            ai.habituationRecoveryHours = Math.max(0.1, habituation.optDouble("recoveryHours", 6));
+        }
         return ai;
     }
 

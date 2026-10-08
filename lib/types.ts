@@ -41,6 +41,11 @@ export type Settings = {
   aiEnabled: boolean;
   /** 엄격 모드: 연장과 "3분만 더"가 없다. 사용자가 직접 켠다. */
   strictMode: boolean;
+  /**
+   * 밴딧 학습 개선 (v0.9.1): 칸 사이 공유, 최근 가중치, 세밀한 보상, 평일/주말, 질림 반영.
+   * 끄면 v0.9.0과 같은 계산. 화면에는 없고, 전후 비교가 필요할 때 쓴다.
+   */
+  banditV2: boolean;
   /** 주간 목표 제안을 이미 답한 주 (월요일 날짜). */
   goalWeekAnswered: string;
 };

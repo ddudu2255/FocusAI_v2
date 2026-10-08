@@ -70,6 +70,7 @@ describe("settings", () => {
       wakeTime: "07:00",
       aiEnabled: true,
       strictMode: false,
+      banditV2: true,
       goalWeekAnswered: "",
     });
     assert.equal(settings.level1Threshold, 15);

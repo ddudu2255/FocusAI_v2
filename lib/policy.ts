@@ -1,4 +1,4 @@
-import { banditTables, hourLabel, riskHours, type BetaTable } from "./ai.ts";
+import { banditTables, HABITUATION, hourLabel, riskHours, type BetaTable } from "./ai.ts";
 import { FRAMINGS, usageStats } from "./logic.ts";
 import type { AppData, Settings, StudyCard } from "./types.ts";
 
@@ -37,10 +37,18 @@ export type Policy = {
     enabled: boolean;
     /** 엄격 모드: 연장과 "3분만 더"를 없앤다. AI와 상관없이 적용. */
     strict: boolean;
-    /** "강도:시간대" → 방식별 Beta(α, β). 서비스가 톰슨 샘플링으로 뽑는다. */
+    /**
+     * 방식별 Beta(α, β). 서비스가 톰슨 샘플링으로 뽑는다.
+     * 칸 이름: ai-2는 "강도:시간대:평일주말", ai-1은 "강도:시간대" (서비스는 둘 다 찾아본다).
+     */
     methods: BetaTable;
-    /** "시간대" → 문구 종류별 Beta(α, β) */
+    /** 문구 종류별 Beta(α, β). 칸 이름: ai-2는 "시간대:평일주말", ai-1은 "시간대". */
     framings: BetaTable;
+    /**
+     * 질림 반영: 최근에 나온 선택지는 뽑은 값을 (1 − strength·0.5^(지난 시간/recoveryHours))배.
+     * ai-1에서는 strength 0 (반영 안 함).
+     */
+    habituation: { strength: number; recoveryHours: number };
     /** 평소 오래 보는 시간 (0~23시). 이 시간엔 세부 수치를 조인다. */
     riskHours: number[];
     /** 문구에 쓸 위험 시간 이름, 예: "밤 11시" */
@@ -53,6 +61,8 @@ export type Policy = {
 
 export const RULE_POLICY_VERSION = "rule-2";
 export const AI_POLICY_VERSION = "ai-1";
+/** AI + 밴딧 학습 개선 (v0.9.1). 기록의 policyVersion으로 전후를 나눠 본다. */
+export const AI_SHARED_POLICY_VERSION = "ai-2";
 
 export function buildPolicy(settings: Settings, data?: AppData, now = new Date()): Policy {
   const stats = data
@@ -63,7 +73,11 @@ export function buildPolicy(settings: Settings, data?: AppData, now = new Date()
   const tables = aiOn ? banditTables(data, now) : { methods: {}, framings: {} };
   const risk = aiOn ? riskHours(data, now) : null;
   return {
-    version: aiOn ? AI_POLICY_VERSION : RULE_POLICY_VERSION,
+    version: !aiOn
+      ? RULE_POLICY_VERSION
+      : settings.banditV2
+        ? AI_SHARED_POLICY_VERSION
+        : AI_POLICY_VERSION,
     goalMinutes: settings.level3Threshold,
     mediumAt: 0.5,
     strongAt: 1,
@@ -83,6 +97,8 @@ export function buildPolicy(settings: Settings, data?: AppData, now = new Date()
       strict: settings.strictMode,
       methods: tables.methods,
       framings: tables.framings,
+      habituation:
+        aiOn && settings.banditV2 ? { ...HABITUATION } : { strength: 0, recoveryHours: HABITUATION.recoveryHours },
       riskHours: risk?.hours ?? [],
       riskLabel: risk ? hourLabel(risk.hours[0]) : "",
       risk: { commitMax: 3, extensionMax: 1, overdraftWaitSec: 10 },

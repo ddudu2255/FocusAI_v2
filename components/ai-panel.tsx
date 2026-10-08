@@ -28,15 +28,18 @@ const METHOD_LABEL: Record<string, string> = {
   card: "공부 카드",
 };
 
-/** 시간대별로 가장 잘 먹힌 방식 (기록 3번 이상인 것만). */
-function bestBySlot(methods: Record<string, Record<string, [number, number]>>) {
+/**
+ * 시간대별로 가장 잘 먹힌 방식 (기록 3번 이상인 것만).
+ * 그 칸에서 직접 쌓인 기록만 본다 (다른 칸에서 빌려 온 값은 섞지 않는다).
+ */
+function bestBySlot(counts: Record<string, Record<string, [number, number]>>) {
   const bySlot = new Map<string, { arm: string; mean: number; n: number }>();
-  for (const [context, arms] of Object.entries(methods)) {
+  for (const [context, arms] of Object.entries(counts)) {
     const slot = context.split(":")[1] ?? "";
-    for (const [arm, [a, b]] of Object.entries(arms)) {
-      const n = a + b - 2;
+    for (const [arm, [s, f]] of Object.entries(arms)) {
+      const n = s + f;
       if (n < 3) continue;
-      const mean = a / (a + b);
+      const mean = (s + 1) / (n + 2);
       const prev = bySlot.get(slot);
       if (!prev || mean > prev.mean) bySlot.set(slot, { arm, mean, n });
     }
@@ -55,7 +58,7 @@ export function AiPanel() {
   const days = recordedDays(data);
   const risk = settings.aiEnabled ? riskHours(data) : null;
   const tables = settings.aiEnabled ? banditTables(data) : null;
-  const best = tables ? bestBySlot(tables.methods) : new Map();
+  const best = tables ? bestBySlot(tables.ownMethods) : new Map();
   const feedbackCount = data.interventions.filter((log) => log.feedback !== null).length;
 
   return (

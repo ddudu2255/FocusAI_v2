@@ -42,6 +42,7 @@ public final class GuardState {
     private static final String KEY_CARDS = "cards";
     private static final String KEY_CARD_INDEX = "card_index";
     private static final String KEY_ROTATE = "rotate_";
+    private static final String KEY_SHOWN = "shown_";
     private static final String KEY_LOCK_ASKED = "lock_asked_for";
     private static final String KEY_MUTED = "muted_by_us";
     private static final String KEY_BLOCK_KIND = "block_kind";
@@ -174,6 +175,24 @@ public final class GuardState {
             int index = prefs.getInt(KEY_ROTATE + key, 0);
             prefs.edit().putInt(KEY_ROTATE + key, index + 1).apply();
             return options.get(Math.floorMod(index, options.size()));
+        }
+    }
+
+    /** When each of {@code arms} was last shown (0 = never), for the bandit's habituation. */
+    public static Map<String, Long> lastShown(Context context, String group, List<String> arms) {
+        Map<String, Long> out = new java.util.HashMap<>();
+        if (arms == null) return out;
+        synchronized (LOCK) {
+            SharedPreferences prefs = prefs(context);
+            for (String arm : arms) out.put(arm, prefs.getLong(KEY_SHOWN + group + "_" + arm, 0L));
+        }
+        return out;
+    }
+
+    public static void markShown(Context context, String group, String arm, long now) {
+        if (arm == null) return;
+        synchronized (LOCK) {
+            prefs(context).edit().putLong(KEY_SHOWN + group + "_" + arm, now).apply();
         }
     }
 

@@ -14,6 +14,23 @@ final class GuardBandit {
     private GuardBandit() {}
 
     static String pick(List<String> arms, Map<String, double[]> posteriors, Random random) {
+        return pick(arms, posteriors, random, null, 0L, 0, 1);
+    }
+
+    /**
+     * Same, with habituation (ai-2): an arm shown recently has its draw scaled by
+     * 1 - strength * 0.5^(hours since shown / recoveryHours), so a fresh arm gets a turn.
+     * Learning is unchanged; only the pick leans away from repeats for a while.
+     */
+    static String pick(
+        List<String> arms,
+        Map<String, double[]> posteriors,
+        Random random,
+        Map<String, Long> lastShown,
+        long now,
+        double strength,
+        double recoveryHours
+    ) {
         if (arms == null || arms.isEmpty()) return null;
         String best = arms.get(0);
         double bestDraw = -1;
@@ -22,12 +39,21 @@ final class GuardBandit {
             double alpha = ab == null ? 1 : Math.max(0.01, ab[0]);
             double beta = ab == null ? 1 : Math.max(0.01, ab[1]);
             double draw = beta(alpha, beta, random);
+            Long shown = lastShown == null ? null : lastShown.get(arm);
+            draw *= freshness(shown == null ? 0L : shown, now, strength, recoveryHours);
             if (draw > bestDraw) {
                 bestDraw = draw;
                 best = arm;
             }
         }
         return best;
+    }
+
+    /** 1 for never or long ago; 1 - strength right after being shown. */
+    static double freshness(long shownAt, long now, double strength, double recoveryHours) {
+        if (strength <= 0 || shownAt <= 0 || now < shownAt || recoveryHours <= 0) return 1;
+        double hours = (now - shownAt) / 3_600_000.0;
+        return 1 - Math.min(1, strength) * Math.pow(0.5, hours / recoveryHours);
     }
 
     /** Mean of the posterior, for showing what the AI has learned. */

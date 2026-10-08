@@ -29,6 +29,7 @@ export function defaultSettings(): Settings {
     wakeTime: "07:00",
     aiEnabled: true,
     strictMode: false,
+    banditV2: true,
     goalWeekAnswered: "",
   };
 }
@@ -46,6 +47,7 @@ export function settingsFromGoal(
     | "wakeTime"
     | "aiEnabled"
     | "strictMode"
+    | "banditV2"
     | "goalWeekAnswered"
   >,
 ): Settings {
@@ -255,6 +257,7 @@ export function readSettings(value: unknown): Settings {
         : defaults.wakeTime,
     aiEnabled: raw.aiEnabled !== false,
     strictMode: raw.strictMode === true,
+    banditV2: raw.banditV2 !== false,
     goalWeekAnswered: typeof raw.goalWeekAnswered === "string" ? raw.goalWeekAnswered : "",
   };
   const goal =

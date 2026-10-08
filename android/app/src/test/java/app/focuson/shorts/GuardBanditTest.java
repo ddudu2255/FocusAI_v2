@@ -59,6 +59,50 @@ public class GuardBanditTest {
     }
 
     @Test
+    public void recentlyShownArmsAreLessLikelyForAWhile() {
+        Map<String, double[]> posteriors = new HashMap<>();
+        posteriors.put("breath", new double[] {6, 6});
+        posteriors.put("card", new double[] {6, 6});
+        List<String> arms = Arrays.asList("breath", "card");
+        long now = 100L * 3_600_000L;
+        Map<String, Long> shown = new HashMap<>();
+        shown.put("breath", now - 60_000L); // a minute ago
+        Random random = new Random(11);
+        int breath = 0;
+        for (int i = 0; i < 2000; i++) {
+            if ("breath".equals(GuardBandit.pick(arms, posteriors, random, shown, now, 0.3, 6))) breath++;
+        }
+        assertTrue("breath picked " + breath, breath < 800);
+
+        // Off (strength 0) or long ago: back to an even split.
+        assertEquals(1.0, GuardBandit.freshness(now - 60_000L, now, 0, 6), 0.0);
+        assertEquals(1.0, GuardBandit.freshness(0L, now, 0.3, 6), 0.0);
+        assertEquals(0.7, GuardBandit.freshness(now, now, 0.3, 6), 1e-9);
+        assertEquals(0.85, GuardBandit.freshness(now - 6 * 3_600_000L, now, 0.3, 6), 1e-9);
+        assertTrue(GuardBandit.freshness(now - 72 * 3_600_000L, now, 0.3, 6) > 0.999);
+    }
+
+    @Test
+    public void looksUpWeekdayCellsThenFallsBackToOldKeys() {
+        GuardPolicy.Ai ai = new GuardPolicy.Ai();
+        Map<String, double[]> weekend = new HashMap<>();
+        weekend.put("breath", new double[] {9, 1});
+        Map<String, double[]> old = new HashMap<>();
+        old.put("card", new double[] {2, 2});
+        ai.methods.put("2:night:weekend", weekend);
+        ai.methods.put("2:day", old);
+        java.util.Calendar saturdayNight = java.util.Calendar.getInstance();
+        saturdayNight.set(2026, java.util.Calendar.OCTOBER, 10, 23, 0); // Saturday
+        java.util.Calendar mondayNoon = java.util.Calendar.getInstance();
+        mondayNoon.set(2026, java.util.Calendar.OCTOBER, 12, 13, 0); // Monday
+        assertEquals("weekend", GuardPolicy.dayType(saturdayNight));
+        assertEquals("weekday", GuardPolicy.dayType(mondayNoon));
+        assertEquals(weekend, ai.methodsAt(2, saturdayNight));
+        assertEquals(old, ai.methodsAt(2, mondayNoon));
+        assertNull(ai.methodsAt(1, mondayNoon));
+    }
+
+    @Test
     public void timeSlotsMatchTheWebSide() {
         assertEquals("morning", GuardPolicy.timeSlot(5));
         assertEquals("day", GuardPolicy.timeSlot(11));
