@@ -41,6 +41,8 @@ final class GuardPolicy {
     Stats stats = Stats.none();
     /** AI phase settings and learned tables (lib/ai.ts, lib/policy.ts). */
     Ai ai = new Ai();
+    /** 공부 모드: a due study card replaces the light/medium activity (normal methods otherwise). */
+    boolean studyMode;
 
     /**
      * What the AI decides inside the rules: which method / line to show (Thompson
@@ -204,6 +206,7 @@ final class GuardPolicy {
                 strings(json.optJSONArray("framings"), base.framings));
             policy.stats = stats(json.optJSONObject("stats"));
             policy.ai = ai(json.optJSONObject("ai"));
+            policy.studyMode = json.optBoolean("studyMode", false);
             return policy;
         } catch (Exception e) {
             return base;

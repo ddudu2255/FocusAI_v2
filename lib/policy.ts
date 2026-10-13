@@ -23,6 +23,11 @@ export type Policy = {
   dayEndHour: number;
   /** 시간 체감 문구(S1) 종류와 순서 */
   framings: string[];
+  /**
+   * 공부 모드: 쉬는 중이 아닌 카드가 있으면 약함·중간 활동 대신 공부 카드.
+   * 모든 카드가 쉬는 중이거나 카드가 없으면 서비스가 평소 활동으로 넘어간다.
+   */
+  studyMode: boolean;
   /** 문구에 쓰는 통계. 서비스가 지금 시각 기준으로 마무리 계산을 한다. */
   stats: {
     avg7Seconds: number;
@@ -85,6 +90,7 @@ export function buildPolicy(settings: Settings, data?: AppData, now = new Date()
       light: ["pause", "framing"],
       medium: ["breath", "alternative", "reflection", "card", "pause", "framing"],
     },
+    studyMode: settings.studyMode,
     commitOptions: [3, 5, 10],
     extensionLadder: [10, 5, 3],
     overdraftMinutes: 3,
@@ -110,7 +116,7 @@ export function buildPolicy(settings: Settings, data?: AppData, now = new Date()
 /** 서비스에 넘길 공부 카드: 덜 본 카드부터 최대 {limit}장. */
 export function cardsForService(
   data: AppData,
-  limit = 20,
+  limit = 60,
 ): { id: string; question: string; options: string[]; answer: number; explanation: string }[] {
   return [...data.cards]
     .sort((a, b) => a.shown - b.shown || a.createdAt.localeCompare(b.createdAt))
@@ -125,29 +131,59 @@ export function cardsForService(
 }
 
 /** 붙여넣기 가져오기용 질문 문장. ChatGPT·Gemini 무료 채팅에 자료와 함께 붙여 넣는다. */
-export const CARD_PROMPT = `아래 자료로 객관식 문제 5개를 만들어 줘.
+export const CARD_PROMPT = `아래 자료(붙여 넣은 글이나 첨부한 파일)로 객관식 문제 5개를 만들어 줘.
+범위: (비워 두면 전체. 예: 3장, 1~10쪽)
 반드시 아래 JSON 형식만 코드 블록 하나로 출력하고, 그 밖의 말은 쓰지 마.
 [{"question":"문제","options":["보기1","보기2","보기3","보기4"],"answer":1,"explanation":"정답인 이유를 한두 문장으로"}]
 - answer는 정답 보기의 번호(1~4)야.
 - explanation에는 왜 그게 정답인지 짧게 설명해 줘.
 - 따옴표는 곧은 따옴표(")만 써 줘.
+- 숫자나 연도를 외우는 문제보다, 개념을 이해했는지 묻는 문제로 만들어 줘.
+- 다 만든 뒤 정답이 자료에 실제로 나오는지 다시 확인하고, 애매하거나 자료에 없는 문제는 빼 줘.
 
 자료:
 `;
 
+/** 비교용: 띄어쓰기·문장부호·대소문자를 지운다. */
+export function normalizeCardText(text: string): string {
+  return text.toLowerCase().replace(/[\s.,!?·'"“”‘’()[\]{}:;~\-]/g, "");
+}
+
+/** "보기1", "...", "-" 처럼 내용 없는 보기 */
+const JUNK_OPTION = /^(보기\s*\d+|선택지\s*\d+|option\s*\d+|\.{2,}|…+|-+|\?+|_+)$/i;
+
+/**
+ * 해설이 정답이 아닌 보기를 가리키는 것 같으면 true.
+ * 해설에 보기 글자가 하나 이상 나오는데 정답 보기는 없을 때만 의심한다
+ * (정답을 풀어 쓴 해설은 보기 글자가 안 나오므로 의심하지 않는다).
+ */
+export function explanationLooksWrong(card: Pick<StudyCard, "options" | "answer" | "explanation">): boolean {
+  const explanation = normalizeCardText(card.explanation);
+  if (!explanation) return false;
+  const mentioned = card.options
+    .map((o, i) => ({ i, text: normalizeCardText(o) }))
+    .filter((o) => o.text.length >= 2 && explanation.includes(o.text));
+  return mentioned.length > 0 && !mentioned.some((o) => o.i === card.answer);
+}
+
 /**
  * 붙여넣은 글에서 카드를 꺼낸다. 앞뒤 설명이나 코드 블록 표시가 섞여 있어도
- * 첫 [ 부터 마지막 ] 까지를 읽는다. 형식이 틀린 문제는 건너뛴다.
+ * 첫 [ 부터 마지막 ] 까지를 읽는다.
+ * 자동 검사: 형식이 틀리거나, 보기가 비었거나 겹치거나, 내용 없는 보기("보기1", "...")가 있으면 건너뛴다.
+ * 이미 있는 카드(또는 같은 묶음 안)와 문제가 같으면 duplicates로 센다.
+ * 해설이 다른 보기를 가리키는 것 같으면 가져오되 suspectIds에 넣는다 (가져온 뒤 확인 화면에 표시).
  */
 export function parseCardImport(
   text: string,
   now = new Date(),
   makeId: () => string = () => crypto.randomUUID(),
-): { cards: StudyCard[]; skipped: number; error: string | null } {
+  existing: Pick<StudyCard, "question">[] = [],
+): { cards: StudyCard[]; skipped: number; duplicates: number; suspectIds: string[]; error: string | null } {
   const start = text.indexOf("[");
   const end = text.lastIndexOf("]");
+  const none = { cards: [], skipped: 0, duplicates: 0, suspectIds: [] };
   if (start < 0 || end <= start) {
-    return { cards: [], skipped: 0, error: "[ ] 로 묶인 JSON을 찾지 못했어요." };
+    return { ...none, error: "[ ] 로 묶인 JSON을 찾지 못했어요." };
   }
   // ChatGPT·Gemini가 흔히 섞는 것: 둥근 따옴표, 끝에 남은 쉼표.
   const cleaned = text
@@ -159,13 +195,16 @@ export function parseCardImport(
   try {
     parsed = JSON.parse(cleaned);
   } catch {
-    return { cards: [], skipped: 0, error: "JSON 형식이 맞지 않아요. 결과를 그대로 다시 붙여넣어 주세요." };
+    return { ...none, error: "JSON 형식이 맞지 않아요. 결과를 그대로 다시 붙여넣어 주세요." };
   }
   if (!Array.isArray(parsed)) {
-    return { cards: [], skipped: 0, error: "문제 목록(배열)이 아니에요." };
+    return { ...none, error: "문제 목록(배열)이 아니에요." };
   }
   const cards: StudyCard[] = [];
+  const suspectIds: string[] = [];
+  const seen = new Set(existing.map((card) => normalizeCardText(card.question)));
   let skipped = 0;
+  let duplicates = 0;
   for (const item of parsed) {
     const raw = item as { question?: unknown; options?: unknown; answer?: unknown; explanation?: unknown };
     const options = Array.isArray(raw.options)
@@ -181,10 +220,14 @@ export function parseCardImport(
       if (at >= 0) answer = at + 1;
     }
     const question = typeof raw.question === "string" ? raw.question.trim() : "";
+    const optionKeys = options.map(normalizeCardText);
     if (
-      !question ||
+      question.length < 4 ||
       options.length < 2 ||
       options.length > 6 ||
+      options.some((o) => JUNK_OPTION.test(o)) ||
+      optionKeys.some((key) => !key) ||
+      new Set(optionKeys).size !== optionKeys.length ||
       !Number.isInteger(answer) ||
       answer < 1 ||
       answer > options.length ||
@@ -193,7 +236,13 @@ export function parseCardImport(
       skipped += 1;
       continue;
     }
-    cards.push({
+    const key = normalizeCardText(question);
+    if (seen.has(key)) {
+      duplicates += 1;
+      continue;
+    }
+    seen.add(key);
+    const card: StudyCard = {
       id: makeId(),
       question,
       options,
@@ -203,7 +252,15 @@ export function parseCardImport(
       shown: 0,
       correct: 0,
       explanation: typeof raw.explanation === "string" ? raw.explanation.trim().slice(0, 500) : "",
-    });
+    };
+    if (explanationLooksWrong(card)) suspectIds.push(card.id);
+    cards.push(card);
   }
-  return { cards, skipped, error: cards.length === 0 ? "가져올 수 있는 문제가 없어요." : null };
+  return {
+    cards,
+    skipped,
+    duplicates,
+    suspectIds,
+    error: cards.length === 0 ? "가져올 수 있는 문제가 없어요." : null,
+  };
 }

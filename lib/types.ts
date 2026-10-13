@@ -33,8 +33,6 @@ export type Settings = {
   finalGoal: number;
   /** "오늘은 끝" 잠금이 풀리는 시각(0-23시). */
   dayEndHour: number;
-  /** 관심 주제. 기사 카드는 AI 단계에서 만든다. */
-  interestTopic: string;
   /** 일어나는 시각 HH:MM. 밤의 "잠과 비교" 문구에 쓴다. 다음 알람이 있으면 알람을 먼저 쓴다. */
   wakeTime: string;
   /** AI 개인화. 끄면 규칙대로 동작한다 (AI 전후 비교용). */
@@ -46,6 +44,8 @@ export type Settings = {
    * 끄면 v0.9.0과 같은 계산. 화면에는 없고, 전후 비교가 필요할 때 쓴다.
    */
   banditV2: boolean;
+  /** 공부 모드: 약함·중간 단계의 개입을 공부 카드로만 한다 (카드가 없으면 평소대로). */
+  studyMode: boolean;
   /** 주간 목표 제안을 이미 답한 주 (월요일 날짜). */
   goalWeekAnswered: string;
 };
@@ -264,6 +264,7 @@ export type NativeIntervention = {
   blockMinutes?: number;
   extensionIndex?: number;
   policyVersion?: string;
+  /** stage "card_report": 사용자가 "이상한 문제"로 신고한 카드는 cardId에 담긴다. */
   /** stage "feedback": answer to "도움이 됐나요?" for the row refId */
   refId?: string;
   feedback?: string;

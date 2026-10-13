@@ -380,9 +380,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             return next;
           });
         }
+        // "이상한 문제"로 신고된 카드는 지운다.
+        const reported = new Set(added.reports);
+        const removedCards = (merged.cards ?? current.cards).filter((card) => reported.has(card.id));
+        if (removedCards.length > 0) {
+          merged.cards = (merged.cards ?? current.cards).filter((card) => !reported.has(card.id));
+        }
         const settled = settleReentry(merged);
         const ops: Op[] = [
-          ...touchedCards.map((row) => ({ kind: "card" as const, row })),
+          ...removedCards.map((card) => ({ kind: "deleteCard" as const, id: card.id })),
+          ...touchedCards.filter((row) => !reported.has(row.id)).map((row) => ({ kind: "card" as const, row })),
           ...added.usageLogs.map((row) => ({ kind: "session" as const, row })),
           ...added.lockAttempts.map((row) => ({ kind: "lock" as const, row })),
           // 재진입 판정이 붙은 개입은 최신 내용으로 덮어쓴다.

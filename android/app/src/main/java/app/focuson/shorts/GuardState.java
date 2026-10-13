@@ -40,9 +40,12 @@ public final class GuardState {
     private static final String KEY_ALLOW_UNTIL = "allow_until";
     private static final String KEY_POLICY = "policy";
     private static final String KEY_CARDS = "cards";
-    private static final String KEY_CARD_INDEX = "card_index";
     private static final String KEY_ROTATE = "rotate_";
     private static final String KEY_SHOWN = "shown_";
+    /** Per card: when it was last shown, and how many times in a row it was answered right. */
+    private static final String KEY_CARD_LAST = "card_last_";
+    private static final String KEY_CARD_STREAK = "card_streak_";
+    private static final long HOUR_MS = 3_600_000L;
     private static final String KEY_LOCK_ASKED = "lock_asked_for";
     private static final String KEY_MUTED = "muted_by_us";
     private static final String KEY_BLOCK_KIND = "block_kind";
@@ -146,22 +149,79 @@ public final class GuardState {
         }
     }
 
+    /** Drops a card the user reported from the cached list, so it is not shown again before the next sync. */
+    public static void removeCard(Context context, String id) {
+        if (id == null) return;
+        synchronized (LOCK) {
+            SharedPreferences prefs = prefs(context);
+            JSONArray cards = readArray(prefs, KEY_CARDS);
+            JSONArray kept = new JSONArray();
+            for (int i = 0; i < cards.length(); i++) {
+                JSONObject card = cards.optJSONObject(i);
+                if (card != null && !id.equals(card.optString("id"))) kept.put(card);
+            }
+            prefs.edit().putString(KEY_CARDS, kept.toString()).commit();
+        }
+    }
+
     public static boolean hasCards(Context context) {
         synchronized (LOCK) {
             return readArray(prefs(context), KEY_CARDS).length() > 0;
         }
     }
 
-    /** Next study card in turn, or null when none were sent. */
-    public static JSONObject nextCard(Context context) {
+    /**
+     * When a card may show again (spaced review): never shown = now; last answer wrong or
+     * unanswered = 1 hour after; right 1 / 2 / 3+ times in a row = 1 / 3 / 7 days after.
+     */
+    static long cardDueAt(long lastShown, int streak) {
+        if (lastShown <= 0) return 0L;
+        if (streak <= 0) return lastShown + HOUR_MS;
+        if (streak == 1) return lastShown + 24 * HOUR_MS;
+        if (streak == 2) return lastShown + 72 * HOUR_MS;
+        return lastShown + 168 * HOUR_MS;
+    }
+
+    /** True when some card is due now. */
+    public static boolean hasDueCard(Context context, long now) {
+        synchronized (LOCK) {
+            return dueCard(prefs(context), now) != null;
+        }
+    }
+
+    /**
+     * The first due card (the web side sends the least-shown first), or null when every card
+     * is resting. Marks it shown, so leaving without answering also rests it for an hour.
+     */
+    public static JSONObject nextCard(Context context, long now) {
         synchronized (LOCK) {
             SharedPreferences prefs = prefs(context);
-            JSONArray cards = readArray(prefs, KEY_CARDS);
-            if (cards.length() == 0) return null;
-            int index = prefs.getInt(KEY_CARD_INDEX, 0);
-            prefs.edit().putInt(KEY_CARD_INDEX, index + 1).apply();
-            return cards.optJSONObject(Math.floorMod(index, cards.length()));
+            JSONObject card = dueCard(prefs, now);
+            if (card != null) prefs.edit().putLong(KEY_CARD_LAST + card.optString("id"), now).apply();
+            return card;
         }
+    }
+
+    /** After an answer: a right answer extends the streak, a wrong one resets it. */
+    public static void recordCardAnswer(Context context, String id, boolean correct, long now) {
+        if (id == null) return;
+        synchronized (LOCK) {
+            SharedPreferences prefs = prefs(context);
+            int streak = correct ? prefs.getInt(KEY_CARD_STREAK + id, 0) + 1 : 0;
+            prefs.edit().putInt(KEY_CARD_STREAK + id, streak).putLong(KEY_CARD_LAST + id, now).apply();
+        }
+    }
+
+    private static JSONObject dueCard(SharedPreferences prefs, long now) {
+        JSONArray cards = readArray(prefs, KEY_CARDS);
+        for (int i = 0; i < cards.length(); i++) {
+            JSONObject card = cards.optJSONObject(i);
+            if (card == null) continue;
+            String id = card.optString("id");
+            long due = cardDueAt(prefs.getLong(KEY_CARD_LAST + id, 0L), prefs.getInt(KEY_CARD_STREAK + id, 0));
+            if (due <= now) return card;
+        }
+        return null;
     }
 
     /**
@@ -579,6 +639,13 @@ public final class GuardState {
                 .putString(KEY_WEB_DATE, "")
                 .putFloat(KEY_WEB_SECONDS, 0f)
                 .commit();
+            // Card review state goes with the records (cards themselves stay).
+            SharedPreferences prefs = prefs(context);
+            SharedPreferences.Editor editor = prefs.edit();
+            for (String key : prefs.getAll().keySet()) {
+                if (key.startsWith(KEY_CARD_LAST) || key.startsWith(KEY_CARD_STREAK)) editor.remove(key);
+            }
+            editor.commit();
         }
     }
 

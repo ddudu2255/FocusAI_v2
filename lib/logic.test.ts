@@ -23,7 +23,7 @@ import {
   validateSettings,
   webSecondsOn,
 } from "./logic.ts";
-import { buildPolicy, cardsForService, parseCardImport } from "./policy.ts";
+import { buildPolicy, CARD_PROMPT, cardsForService, explanationLooksWrong, parseCardImport } from "./policy.ts";
 import {
   defaultData,
   defaultSettings,
@@ -66,11 +66,11 @@ describe("settings", () => {
       notifyEnabled: true,
       finalGoal: 15,
       dayEndHour: 6,
-      interestTopic: "",
       wakeTime: "07:00",
       aiEnabled: true,
       strictMode: false,
       banditV2: true,
+      studyMode: false,
       goalWeekAnswered: "",
     });
     assert.equal(settings.level1Threshold, 15);
@@ -85,7 +85,6 @@ describe("settings", () => {
     assert.equal(settings.level3Threshold, 20);
     assert.equal(settings.finalGoal, 10);
     assert.equal(settings.dayEndHour, 6);
-    assert.equal(settings.interestTopic, "");
   });
 });
 
@@ -558,6 +557,87 @@ describe("policy and cards", () => {
     });
     const data = { ...defaultData(), cards: [card("seen", 5), card("new", 0)] };
     assert.deepEqual(cardsForService(data, 1).map((c) => c.id), ["new"]);
+  });
+});
+
+describe("v0.9.2 study cards", () => {
+  const studyCard = (id: string, question: string) => ({
+    id,
+    question,
+    options: ["a", "b"],
+    answer: 0,
+    createdAt: "2026-10-13T00:00:00.000Z",
+    source: "import" as const,
+    shown: 0,
+    correct: 0,
+    explanation: "",
+  });
+
+  it("skips cards with empty, junk or repeated options", () => {
+    let n = 0;
+    const text = `[
+  {"question":"인플레이션이란?","options":["물가 상승","물가 하락","환율","금리"],"answer":1},
+  {"question":"보기가 겹치는 문제","options":["물가 상승","물가  상승!","환율","금리"],"answer":1},
+  {"question":"내용 없는 보기 문제","options":["보기1","보기2","보기3","보기4"],"answer":1},
+  {"question":"점만 있는 보기 문제","options":["...","물가","환율","금리"],"answer":2},
+  {"question":"짧","options":["a","b"],"answer":1}
+]`;
+    const result = parseCardImport(text, new Date(2026, 9, 13), () => `c${++n}`);
+    assert.equal(result.cards.length, 1);
+    assert.equal(result.skipped, 4);
+  });
+
+  it("does not import the same question twice", () => {
+    let n = 0;
+    const text = `[
+  {"question":"인플레이션이란?","options":["물가 상승","물가 하락"],"answer":1},
+  {"question":"인플레이션이란 ?","options":["물가 상승","물가 하락"],"answer":1},
+  {"question":"기회비용이란?","options":["포기한 것의 가치","낸 돈"],"answer":1}
+]`;
+    const existing = [studyCard("old", "기회비용이란?")];
+    const result = parseCardImport(text, new Date(2026, 9, 13), () => `c${++n}`, existing);
+    assert.equal(result.cards.length, 1);
+    assert.equal(result.duplicates, 2);
+  });
+
+  it("marks cards whose explanation points at another option", () => {
+    let n = 0;
+    const text = `[
+  {"question":"서유럽 밀 가격은 몇 배?","options":["2배","2.6배","3.3배","4배"],"answer":4,"explanation":"자료에 따르면 2.6배 올랐어요."},
+  {"question":"영국 밀 가격은 몇 배?","options":["2배","2.6배","3.3배","4배"],"answer":2,"explanation":"영국은 2.6배, 서유럽은 4배였어요."},
+  {"question":"인플레이션이란?","options":["물가 상승","물가 하락"],"answer":1,"explanation":"물가가 전반적으로 계속 오르는 상태예요."}
+]`;
+    const result = parseCardImport(text, new Date(2026, 9, 13), () => `c${++n}`);
+    assert.equal(result.cards.length, 3);
+    assert.deepEqual(result.suspectIds, ["c1"]);
+    assert.equal(explanationLooksWrong({ options: ["A", "B"], answer: 0, explanation: "" }), false);
+  });
+
+  it("passes study mode to the service and keeps the usual activities as fallback", () => {
+    const base = defaultData();
+    const withCards = { ...base, cards: [studyCard("k", "문제 하나")] };
+    const on = buildPolicy({ ...base.settings, studyMode: true }, withCards);
+    assert.equal(on.studyMode, true);
+    assert.ok(on.methods.medium.includes("breath"));
+    assert.equal(buildPolicy(base.settings, withCards).studyMode, false);
+  });
+
+  it("asks the AI for concept questions, a range, and a self-check", () => {
+    assert.ok(CARD_PROMPT.includes("범위:"));
+    assert.ok(CARD_PROMPT.includes("개념을 이해했는지"));
+    assert.ok(CARD_PROMPT.includes("다시 확인하고"));
+  });
+
+  it("reads card reports from the sheet without making intervention rows", () => {
+    const result = convertNativeBatch(defaultData(), {
+      sessions: [],
+      lockAttempts: [],
+      interventions: [
+        { id: "r1", createdAt: new Date(2026, 9, 13, 21).getTime(), target: "youtube", level: 2, reason: "선택하지 않음", interventionType: "card", alternativeAction: null, outcome: "card_report", usageSeconds: 0, stage: "card_report", cardId: "bad-card" },
+      ],
+    });
+    assert.deepEqual(result.reports, ["bad-card"]);
+    assert.equal(result.interventions.length, 0);
   });
 });
 

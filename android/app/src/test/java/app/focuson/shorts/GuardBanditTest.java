@@ -103,6 +103,18 @@ public class GuardBanditTest {
     }
 
     @Test
+    public void studyCardsComeBackSoonerWhenWrong() {
+        long hour = 3_600_000L;
+        long last = 1_000L * hour;
+        assertEquals(0L, GuardState.cardDueAt(0L, 0));
+        assertEquals(last + hour, GuardState.cardDueAt(last, 0));
+        assertEquals(last + 24 * hour, GuardState.cardDueAt(last, 1));
+        assertEquals(last + 72 * hour, GuardState.cardDueAt(last, 2));
+        assertEquals(last + 168 * hour, GuardState.cardDueAt(last, 3));
+        assertEquals(last + 168 * hour, GuardState.cardDueAt(last, 9));
+    }
+
+    @Test
     public void timeSlotsMatchTheWebSide() {
         assertEquals("morning", GuardPolicy.timeSlot(5));
         assertEquals("day", GuardPolicy.timeSlot(11));

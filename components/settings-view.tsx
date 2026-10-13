@@ -20,7 +20,6 @@ type Draft = {
   goal: string;
   finalGoal: string;
   dayEndHour: string;
-  interestTopic: string;
   wakeTime: string;
   notificationTime: string;
   notifyEnabled: boolean;
@@ -31,7 +30,6 @@ function toDraft(settings: Settings): Draft {
     goal: String(settings.level3Threshold),
     finalGoal: String(settings.finalGoal),
     dayEndHour: String(settings.dayEndHour),
-    interestTopic: settings.interestTopic,
     wakeTime: settings.wakeTime,
     notificationTime: settings.notificationTime,
     notifyEnabled: settings.notifyEnabled,
@@ -91,11 +89,11 @@ export function SettingsView() {
         notifyEnabled: form.notifyEnabled,
         finalGoal,
         dayEndHour,
-        interestTopic: form.interestTopic.trim().slice(0, 40),
         wakeTime,
         aiEnabled: data.settings.aiEnabled,
         strictMode: data.settings.strictMode,
         banditV2: data.settings.banditV2,
+        studyMode: data.settings.studyMode,
         goalWeekAnswered: data.settings.goalWeekAnswered,
       }),
     );
@@ -172,19 +170,6 @@ export function SettingsView() {
           <p className="text-xs leading-5 text-muted-foreground">
             밤에 쇼츠를 열면 &quot;지금 자면 몇 시간 잘 수 있어요&quot;를 알려 줄 때 씁니다. 휴대폰에
             12시간 안에 울리는 알람이 있으면 알람 시각을 먼저 씁니다.
-          </p>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="topic">관심 주제</Label>
-          <Input
-            id="topic"
-            value={form.interestTopic}
-            maxLength={40}
-            placeholder="예: AI, 축구, 주식"
-            onChange={(event) => update({ interestTopic: event.target.value })}
-          />
-          <p className="text-xs leading-5 text-muted-foreground">
-            나중에 이 주제의 최신 기사 요약을 쇼츠 대신 보여 줄 때 씁니다. 아직은 저장만 합니다.
           </p>
         </div>
         <div className="space-y-2">

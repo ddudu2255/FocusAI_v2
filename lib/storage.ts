@@ -25,11 +25,11 @@ export function defaultSettings(): Settings {
     notifyEnabled: true,
     finalGoal: 10,
     dayEndHour: 6,
-    interestTopic: "",
     wakeTime: "07:00",
     aiEnabled: true,
     strictMode: false,
     banditV2: true,
+    studyMode: false,
     goalWeekAnswered: "",
   };
 }
@@ -43,11 +43,11 @@ export function settingsFromGoal(
     | "notifyEnabled"
     | "finalGoal"
     | "dayEndHour"
-    | "interestTopic"
     | "wakeTime"
     | "aiEnabled"
     | "strictMode"
     | "banditV2"
+    | "studyMode"
     | "goalWeekAnswered"
   >,
 ): Settings {
@@ -250,7 +250,6 @@ export function readSettings(value: unknown): Settings {
       typeof raw.dayEndHour === "number" && raw.dayEndHour >= 0 && raw.dayEndHour <= 12
         ? Math.round(raw.dayEndHour)
         : defaults.dayEndHour,
-    interestTopic: typeof raw.interestTopic === "string" ? raw.interestTopic.slice(0, 40) : "",
     wakeTime:
       typeof raw.wakeTime === "string" && /^\d{2}:\d{2}$/.test(raw.wakeTime)
         ? raw.wakeTime
@@ -258,6 +257,7 @@ export function readSettings(value: unknown): Settings {
     aiEnabled: raw.aiEnabled !== false,
     strictMode: raw.strictMode === true,
     banditV2: raw.banditV2 !== false,
+    studyMode: raw.studyMode === true,
     goalWeekAnswered: typeof raw.goalWeekAnswered === "string" ? raw.goalWeekAnswered : "",
   };
   const goal =

@@ -49,6 +49,10 @@ final class GuardCopy {
     static final String PIP_NOTE = "작은 창으로 보던 쇼츠예요";
     static final String PIP_CLOSE_GUIDE = "작은 창의 X를 눌러 닫아 주세요. 닫으면 소리가 돌아와요.";
 
+    // --- Study cards (approved 2026-10-13) ---
+    static final String CARD_REPORT = "이 문제 이상해요";
+    static final String CARD_REPORTED = "이 문제는 빼 둘게요. 다시 나오지 않아요.";
+
     // --- AI phase lines (approved 2026-10-06, docs/HANDOFF.md) ---
 
     /** Sheet notice in a risky hour (A7). */

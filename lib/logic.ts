@@ -741,6 +741,8 @@ export function convertNativeBatch(
   interventions: InterventionLog[];
   lockAttempts: LockAttempt[];
   feedback: { refId: string; feedback: "helpful" | "not" }[];
+  /** 시트에서 "이상한 문제"로 신고된 카드 id */
+  reports: string[];
 } {
   const haveSession = new Set(data.usageLogs.map((log) => log.usageId));
   const haveIntervention = new Set(data.interventions.map((log) => log.interventionId));
@@ -766,8 +768,15 @@ export function convertNativeBatch(
       feedback: row.feedback === "helpful" ? ("helpful" as const) : ("not" as const),
     }));
 
+  const reports = (batch.interventions ?? [])
+    .filter((row) => row.stage === "card_report" && row.cardId)
+    .map((row) => row.cardId as string);
+
   const interventions: InterventionLog[] = (batch.interventions ?? [])
-    .filter((row) => row.id && row.stage !== "feedback" && !haveIntervention.has(row.id))
+    .filter(
+      (row) =>
+        row.id && row.stage !== "feedback" && row.stage !== "card_report" && !haveIntervention.has(row.id),
+    )
     .map((row) => {
       const at = new Date(row.createdAt);
       const level = asLevel(row.level);
@@ -822,7 +831,7 @@ export function convertNativeBatch(
       };
     });
 
-  return { usageLogs, interventions, lockAttempts, feedback };
+  return { usageLogs, interventions, lockAttempts, feedback, reports };
 }
 
 /**

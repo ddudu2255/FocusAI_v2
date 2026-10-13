@@ -140,7 +140,7 @@ final class GuardFlow {
         overlay.step(GuardCopy.LOCKED_TITLE, GuardCopy.locked(until - System.currentTimeMillis(), facts.restToday), box);
         overlay.leave("나가기", () -> leaveQuietly(kind));
 
-        JSONObject card = GuardState.hasCards(context) ? GuardState.nextCard(context) : null;
+        JSONObject card = GuardState.nextCard(context, System.currentTimeMillis());
         boolean[] answering = {false};
         if (card != null) {
             // Turn the urge into one question while resting (rest time keeps counting).
@@ -201,9 +201,17 @@ final class GuardFlow {
     }
 
     private void method(Rec rec, GuardPolicy policy, int band, Runnable next) {
+        boolean cardDue = GuardState.hasDueCard(context, System.currentTimeMillis());
+        if (policy.studyMode && cardDue) {
+            // 공부 모드: a due card replaces the activity. When every card is resting, fall
+            // through to the usual activities so the same few cards do not repeat.
+            rec.method = "card";
+            card(rec, policy, next);
+            return;
+        }
         List<String> options = new ArrayList<>();
         for (String m : policy.methodsFor(band)) {
-            if ("card".equals(m) && !GuardState.hasCards(context)) continue;
+            if ("card".equals(m) && !cardDue) continue;
             if ("framing".equals(m) && rec.usage < 60) continue;
             if (isKnownMethod(m)) options.add(m);
         }
@@ -450,7 +458,7 @@ final class GuardFlow {
     }
 
     private void card(Rec rec, GuardPolicy policy, Runnable next) {
-        JSONObject card = GuardState.nextCard(context);
+        JSONObject card = GuardState.nextCard(context, System.currentTimeMillis());
         View view = card == null ? null : cardView(rec, card, next, null);
         if (view == null) {
             rec.method = "pause";
@@ -496,6 +504,7 @@ final class GuardFlow {
                 if (onAnswering != null) onAnswering.run();
                 rec.cardCorrect = index == answer;
                 rec.verification = "answered";
+                GuardState.recordCardAnswer(context, rec.cardId, rec.cardCorrect, System.currentTimeMillis());
                 overlay.tint(option, rec.cardCorrect ? GuardOverlay.GOOD : GuardOverlay.BAD);
                 if (!rec.cardCorrect && answer >= 0 && answer < buttons.size()) {
                     overlay.tint(buttons.get(answer), GuardOverlay.GOOD);
@@ -515,6 +524,23 @@ final class GuardFlow {
         LinearLayout.LayoutParams goLp = overlay.matchHeight(48);
         goLp.setMargins(0, overlay.dp(10), 0, 0);
         box.addView(go, goLp);
+        // "이 문제 이상해요": drop the card here and in the app, then move on.
+        TextView report = overlay.text(GuardCopy.CARD_REPORT, 13, GuardOverlay.MUTED, false);
+        report.setPadding(0, overlay.dp(12), 0, overlay.dp(4));
+        report.setOnClickListener(v -> {
+            if (report.getTag() != null) return;
+            report.setTag("reported");
+            answered[0] = true;
+            if (onAnswering != null) onAnswering.run();
+            GuardState.removeCard(context, rec.cardId);
+            host.record(cardReportRow(rec));
+            go.setVisibility(View.GONE);
+            note.setText(GuardCopy.CARD_REPORTED);
+            note.setVisibility(View.VISIBLE);
+            report.setVisibility(View.GONE);
+            handler.postDelayed(next, CARD_RESULT_MS + 600);
+        });
+        box.addView(report);
         return box;
     }
 
@@ -706,6 +732,25 @@ final class GuardFlow {
                 .put("reason", "선택하지 않음")
                 .put("interventionType", "feedback")
                 .put("outcome", "feedback")
+                .put("usageSeconds", 0);
+        } catch (JSONException ignored) {
+            // Plain values only.
+        }
+        return row;
+    }
+
+    private static JSONObject cardReportRow(Rec rec) {
+        JSONObject row = new JSONObject();
+        try {
+            row.put("id", UUID.randomUUID().toString())
+                .put("createdAt", System.currentTimeMillis())
+                .put("target", rec.kind)
+                .put("level", rec.band)
+                .put("stage", "card_report")
+                .put("cardId", rec.cardId)
+                .put("reason", "선택하지 않음")
+                .put("interventionType", "card")
+                .put("outcome", "card_report")
                 .put("usageSeconds", 0);
         } catch (JSONException ignored) {
             // Plain values only.
