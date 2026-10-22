@@ -45,13 +45,32 @@ final class GuardCopy {
     static final String[] AFTER_LOCK_ANSWERS = {"쉬었어요", "공부·일", "그냥 기다림"};
 
     static final String STRONG_TITLE = "오늘은 여기까지 해볼까요?";
+    /** YouTube lock title. Reels sessions use {@link #lockedTitle}. */
     static final String LOCKED_TITLE = "쇼츠 쉬는 중";
+    /** YouTube picture-in-picture notice. Reels sessions use {@link #pipNote}. */
     static final String PIP_NOTE = "작은 창으로 보던 쇼츠예요";
     static final String PIP_CLOSE_GUIDE = "작은 창의 X를 눌러 닫아 주세요. 닫으면 소리가 돌아와요.";
 
     // --- Study cards (approved 2026-10-13) ---
     static final String CARD_REPORT = "이 문제 이상해요";
     static final String CARD_REPORTED = "이 문제는 빼 둘게요. 다시 나오지 않아요.";
+
+    /** Sheet noun. YouTube stays 쇼츠. A Reels session says 릴스. */
+    static String playerName(String target) {
+        return "instagram".equals(target) ? "릴스" : "쇼츠";
+    }
+
+    static String lockedTitle(String target) {
+        return playerName(target) + " 쉬는 중";
+    }
+
+    static String pipNote(String target) {
+        return "작은 창으로 보던 " + playerName(target) + "예요";
+    }
+
+    static String reasonTitle(String target) {
+        return "왜 " + playerName(target) + "를 보려고 하나요?";
+    }
 
     // --- AI phase lines (approved 2026-10-06, docs/HANDOFF.md) ---
 
@@ -91,13 +110,18 @@ final class GuardCopy {
     // --- S1. Time line (entry sheet) -------------------------------------------
 
     static String insight(String kind, Facts f) {
+        return insight(kind, f, "youtube");
+    }
+
+    static String insight(String kind, Facts f, String target) {
         if (f.usage < 60) return null;
+        String name = playerName(target);
         switch (kind) {
             case "guilt":
-                return "오늘 쇼츠에 쓴 " + minutes(f.usage) + ", 다시 돌아오지 않아요.";
+                return "오늘 " + name + "에 쓴 " + minutes(f.usage) + ", 다시 돌아오지 않아요.";
             case "weekly":
                 if (f.weekProjection < 600) return null;
-                return "이 속도면 이번 주에 " + minutes(f.weekProjection) + "을 쇼츠에 써요.";
+                return "이 속도면 이번 주에 " + minutes(f.weekProjection) + "을 " + name + "에 써요.";
             case "motivate":
                 if (f.remaining() < 60) return null;
                 return "지금 멈추면 오늘 목표 안에서 끝낼 수 있어요. (" + minutes(f.remaining()) + " 남음)";
@@ -145,6 +169,10 @@ final class GuardCopy {
     // --- S3. Strong band -------------------------------------------------------
 
     static String strong(int index, Facts f) {
+        return strong(index, f, "youtube");
+    }
+
+    static String strong(int index, Facts f, String target) {
         if (Math.floorMod(index, 3) == 2 && f.sleepSeconds >= 600) {
             return "지금 자면 " + minutes(f.sleepSeconds) + " 잘 수 있어요. 오늘은 여기서 마무리해 볼까요? ("
                 + f.sleepBasis + ")";
@@ -153,7 +181,7 @@ final class GuardCopy {
             return "한 개만 더 보려다 30분이 지나기 쉬워요. 오늘은 이미 " + minutes(f.usage) + "이에요.";
         }
         return "오늘 정한 " + minutes(f.goal) + "을 넘어 " + minutes(f.usage)
-            + "을 봤어요. 지금 멈추거나, 잠시 쇼츠를 잠가 둘 수 있어요.";
+            + "을 봤어요. 지금 멈추거나, 잠시 " + playerName(target) + "를 잠가 둘 수 있어요.";
     }
 
     // --- S4. "3분만 더" nudge ---------------------------------------------------

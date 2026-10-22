@@ -129,10 +129,96 @@ public class GuardScreensTest {
                 Collections.singletonList("com.instagram.android:id/clips_viewer_container")
             )
         );
+        assertEquals(
+            "instagram",
+            GuardScreens.classify(
+                "com.instagram.android",
+                Collections.singletonList("com.instagram.android:id/clips_viewer_view_pager")
+            )
+        );
         assertNull(
             GuardScreens.classify(
                 "com.instagram.android",
                 Collections.singletonList("com.instagram.android:id/reel_viewer_root")
+            )
+        );
+        // Substring leftovers are not the viewer. The old "clips_viewer" contains-check matched these.
+        assertNull(
+            GuardScreens.classify(
+                "com.instagram.android",
+                Collections.singletonList("com.instagram.android:id/clips_viewer")
+            )
+        );
+        assertNull(
+            GuardScreens.classify(
+                "com.instagram.android",
+                Collections.singletonList("com.instagram.android:id/clips_viewer_view_pager_extra")
+            )
+        );
+    }
+
+    private static final String IG = "com.instagram.android:id/";
+
+    private static GuardScreens.Mark ig(String leaf, boolean visible, int width, int height) {
+        return new GuardScreens.Mark(IG + leaf, visible, width, height);
+    }
+
+    @Test
+    public void instagramHomeAndOtherScreensDoNotOpenTheSheet() {
+        assertFalse(GuardScreens.opensSheet("com.instagram.android", Arrays.asList(
+            ig("clips_viewer_view_pager", true, 0, 0),
+            ig("clips_viewer_container", true, 0, 0),
+            ig("row_feed_button_like", true, 1080, 96),
+            ig("row_feed_profile_header", true, 1080, 160),
+            ig("row_feed_photo_imageview", true, 1080, 1080)
+        )));
+        // App just opened: the pager is in the tree, reported visible, but 0×0.
+        assertFalse(GuardScreens.opensSheet("com.instagram.android", Arrays.asList(
+            ig("clips_viewer_view_pager", true, 0, 0)
+        )));
+        // Hidden back stack: full size, not visible to the user.
+        assertFalse(GuardScreens.opensSheet("com.instagram.android", Arrays.asList(
+            ig("clips_viewer_view_pager", false, 1080, 2400)
+        )));
+        // Home feed wins even if a pager also has size, same as a long-form id vetoing Shorts.
+        assertFalse(GuardScreens.opensSheet("com.instagram.android", Arrays.asList(
+            ig("clips_viewer_view_pager", true, 1080, 1920),
+            ig("row_feed_button_like", true, 200, 80)
+        )));
+        assertFalse(GuardScreens.opensSheet("com.instagram.android", Arrays.asList(
+            ig("clips_viewer_view_pager", true, 0, 0),
+            ig("inbox_refreshable_thread_list_recyclerview", true, 1080, 1800),
+            ig("row_inbox_container", true, 1080, 200)
+        )));
+        assertFalse(GuardScreens.opensSheet("com.instagram.android", Arrays.asList(
+            ig("clips_viewer_container", true, 0, 0),
+            ig("profile_header_container", true, 1080, 420),
+            ig("row_profile_header", true, 1080, 240),
+            ig("profile_header_full_name", true, 400, 48)
+        )));
+        assertFalse(GuardScreens.opensSheet("com.instagram.android", Arrays.asList(
+            ig("clips_viewer_view_pager", true, 0, 0),
+            ig("action_bar_search_hints_text_layout", true, 900, 120),
+            ig("action_bar_search_edit_text", true, 800, 80)
+        )));
+        assertFalse(GuardScreens.isInstagramReels(Collections.singletonList("clips_viewer_view_pager")));
+        assertFalse(GuardScreens.isInstagramReels(null));
+    }
+
+    @Test
+    public void instagramReelsViewerStillOpensTheSheet() {
+        assertTrue(GuardScreens.opensSheet("com.instagram.android", Arrays.asList(
+            ig("clips_viewer_view_pager", true, 1080, 2400),
+            ig("clips_tab", true, 120, 140)
+        )));
+        assertTrue(GuardScreens.opensSheet("com.instagram.android", Arrays.asList(
+            ig("clips_viewer_container", true, 1080, 2400)
+        )));
+        assertEquals(
+            "instagram",
+            GuardScreens.classifyWindow(
+                "com.instagram.android",
+                Arrays.asList(ig("clips_viewer_view_pager", true, 1080, 2400))
             )
         );
     }

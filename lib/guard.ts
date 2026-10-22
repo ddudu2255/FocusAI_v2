@@ -7,7 +7,7 @@ export type GuardOutcome = "watch" | "leave" | "block";
 
 export type GuardStatus = {
   enabled: boolean;
-  /** 웹 흐름이 이어받을 개입 (Level 3, Instagram). 없으면 "". */
+  /** 예전 웹 흐름이 이어받을 개입. 새 쇼츠·릴스 감지는 네이티브 시트를 쓴다. 없으면 "". */
   pendingTarget: string;
   /** 서비스가 감지 순간 정한 Level과 오늘 누적 초. 0이면 없음. */
   pendingLevel: number;

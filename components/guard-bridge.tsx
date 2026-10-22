@@ -13,7 +13,7 @@ import { buildPolicy, cardsForService } from "@/lib/policy";
  * 안드로이드에서 1.5초마다 접근성 서비스와 맞춘다.
  * 1. 정책표·공부 카드·웹이 잰 오늘 초를 넘기고, 서비스가 쌓은 세션·개입·잠금 시도를 받는다.
  * 2. SQLite에 저장한 뒤에만 ack 해서, 저장 전에 앱이 꺼져도 기록이 남는다.
- * 3. 서비스가 넘긴 개입(Level 3, Instagram)이 있으면 개입 화면을 연다.
+ * 3. 예전에 웹으로 넘긴 개입이 남아 있으면 개입 화면을 연다. 새 쇼츠·릴스 감지는 플레이어 위 시트로 처리한다.
  */
 export function GuardBridge() {
   const router = useRouter();

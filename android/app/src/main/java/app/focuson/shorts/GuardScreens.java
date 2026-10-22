@@ -1,14 +1,16 @@
 package app.focuson.shorts;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
 /**
  * Decides whether a window is the YouTube Shorts player or the Instagram Reels
- * player. Resource ids and view class names are structural. A content
+ * player. Resource ids are structural and must be on screen. A content
  * description is consulted only when it is a short selected tab label
- * (Shorts / 쇼츠 / Reels / 릴스) and is not kept.
+ * (Shorts / 쇼츠 / Reels / 릴스) and is not kept. The Reels tab label alone
+ * is not the viewer.
  */
 public final class GuardScreens {
     public static final String YOUTUBE = "com.google.android.youtube";
@@ -38,9 +40,35 @@ public final class GuardScreens {
         YOUTUBE_ID + "metapanel_overlay_recycler_view"
     };
 
-    /** Full-screen Reels viewer. Feed previews and stories do not use this. */
-    private static final String[] INSTAGRAM_REELS = {
-        "clips_viewer"
+    public static final String INSTAGRAM_ID = INSTAGRAM + ":id/";
+
+    /**
+     * Full-screen Reels viewer only. Exact ids, same as the Shorts ids.
+     * Instagram keeps these nodes in the window on home, DMs, profile, explore,
+     * and a cold start, but with size 0. A feed preview uses other ids.
+     */
+    public static final String[] INSTAGRAM_REELS_IDS = {
+        INSTAGRAM_ID + "clips_viewer_view_pager",
+        INSTAGRAM_ID + "clips_viewer_container"
+    };
+
+    /**
+     * Visible on home, DMs, profile, or explore, not on the Reels viewer.
+     * Same role as the long-form ids: if one of these is on screen, it is not Reels.
+     * The bottom tab bar stays visible on the viewer, so tab ids are not here.
+     */
+    public static final String[] INSTAGRAM_NOT_REELS_IDS = {
+        INSTAGRAM_ID + "row_feed_button_like",
+        INSTAGRAM_ID + "row_feed_button_comment",
+        INSTAGRAM_ID + "row_feed_profile_header",
+        INSTAGRAM_ID + "row_feed_photo_imageview",
+        INSTAGRAM_ID + "inbox_refreshable_thread_list_recyclerview",
+        INSTAGRAM_ID + "row_inbox_container",
+        INSTAGRAM_ID + "profile_header_container",
+        INSTAGRAM_ID + "row_profile_header",
+        INSTAGRAM_ID + "profile_header_full_name",
+        INSTAGRAM_ID + "action_bar_search_hints_text_layout",
+        INSTAGRAM_ID + "action_bar_search_edit_text"
     };
 
     private GuardScreens() {}
@@ -99,9 +127,66 @@ public final class GuardScreens {
             return isYoutubeShorts(hit.ids) ? "youtube" : null;
         }
         if (INSTAGRAM.equals(packageName)) {
-            return containsMarker(hit.ids, INSTAGRAM_REELS) ? "instagram" : null;
+            return isInstagramReels(hit.ids) ? "instagram" : null;
         }
         return null;
+    }
+
+    /**
+     * One node from an Instagram window. {@code width} and {@code height} are the
+     * bounds on screen. A node Instagram still reports as visible at 0×0 does not count.
+     */
+    public static final class Mark {
+        public final String id;
+        public final boolean visibleToUser;
+        public final int width;
+        public final int height;
+
+        public Mark(String id, boolean visibleToUser, int width, int height) {
+            this.id = id;
+            this.visibleToUser = visibleToUser;
+            this.width = width;
+            this.height = height;
+        }
+    }
+
+    /** True when the node is actually on screen. Size 0 is not the Reels viewer. */
+    public static boolean countsOnScreen(boolean visibleToUser, int width, int height) {
+        return visibleToUser && width > 0 && height > 0;
+    }
+
+    /** Ids that passed {@link #countsOnScreen}. Hidden and 0×0 nodes are dropped. */
+    public static List<String> onScreenIds(List<Mark> marks) {
+        if (marks == null) return Collections.emptyList();
+        List<String> ids = new ArrayList<>();
+        for (Mark mark : marks) {
+            if (mark == null || mark.id == null) continue;
+            if (countsOnScreen(mark.visibleToUser, mark.width, mark.height)) ids.add(mark.id);
+        }
+        return ids;
+    }
+
+    /** Classifies a window after dropping nodes that are not actually on screen. */
+    public static String classifyWindow(String packageName, List<Mark> marks) {
+        return classify(packageName, onScreenIds(marks));
+    }
+
+    /**
+     * True when this window is the player, which is what opens the intervention sheet.
+     * Home, DMs, profile, explore, and an Instagram window that only holds a 0×0
+     * Reels pager return false.
+     */
+    public static boolean opensSheet(String packageName, List<Mark> marks) {
+        return classifyWindow(packageName, marks) != null;
+    }
+
+    /**
+     * @param onScreenIds Instagram view ids that are visible and non-zero
+     * @return true when a Reels viewer id is on screen and no home/DM/profile/explore id is
+     */
+    public static boolean isInstagramReels(List<String> onScreenIds) {
+        return firstExact(onScreenIds, INSTAGRAM_REELS_IDS) != null
+            && firstExact(onScreenIds, INSTAGRAM_NOT_REELS_IDS) == null;
     }
 
     /**
@@ -122,22 +207,4 @@ public final class GuardScreens {
         return null;
     }
 
-    private static String leafOf(String id) {
-        if (id == null || id.isEmpty()) return null;
-        int slash = id.lastIndexOf('/');
-        if (slash >= 0 && slash + 1 < id.length()) return id.substring(slash + 1);
-        return id;
-    }
-
-    private static boolean containsMarker(List<String> resourceIds, String[] markers) {
-        if (resourceIds == null) return false;
-        for (String id : resourceIds) {
-            String leaf = leafOf(id);
-            if (leaf == null) continue;
-            for (String marker : markers) {
-                if (leaf.contains(marker)) return true;
-            }
-        }
-        return false;
-    }
 }

@@ -72,4 +72,26 @@ public class GuardCopyTest {
         assertEquals("12분 남았어요.", GuardCopy.locked(12 * 60_000L, 0));
         assertEquals("약속한 3분 중 2분 남았어요.", GuardCopy.resumeToast(3, 110));
     }
+
+    @Test
+    public void reelsSheetSaysReelsAndShortsSheetStaysShorts() {
+        GuardCopy.Facts f = facts(23, 30);
+        f.weekProjection = 160 * 60;
+        assertEquals("릴스 쉬는 중", GuardCopy.lockedTitle("instagram"));
+        assertEquals("쇼츠 쉬는 중", GuardCopy.lockedTitle("youtube"));
+        assertEquals("쇼츠 쉬는 중", GuardCopy.LOCKED_TITLE);
+        assertEquals("작은 창으로 보던 릴스예요", GuardCopy.pipNote("instagram"));
+        assertEquals("작은 창으로 보던 쇼츠예요", GuardCopy.pipNote("youtube"));
+        assertEquals("작은 창으로 보던 쇼츠예요", GuardCopy.PIP_NOTE);
+        assertEquals("왜 릴스를 보려고 하나요?", GuardCopy.reasonTitle("instagram"));
+        assertEquals("왜 쇼츠를 보려고 하나요?", GuardCopy.reasonTitle("youtube"));
+        assertEquals("오늘 릴스에 쓴 23분, 다시 돌아오지 않아요.", GuardCopy.insight("guilt", f, "instagram"));
+        assertEquals("오늘 쇼츠에 쓴 23분, 다시 돌아오지 않아요.", GuardCopy.insight("guilt", f, "youtube"));
+        assertEquals("오늘 쇼츠에 쓴 23분, 다시 돌아오지 않아요.", GuardCopy.insight("guilt", f));
+        assertEquals("이 속도면 이번 주에 2시간 40분을 릴스에 써요.", GuardCopy.insight("weekly", f, "instagram"));
+        assertEquals("이 속도면 이번 주에 2시간 40분을 쇼츠에 써요.", GuardCopy.insight("weekly", f, "youtube"));
+        assertTrue(GuardCopy.strong(0, f, "instagram").contains("잠시 릴스를 잠가"));
+        assertTrue(GuardCopy.strong(0, f, "youtube").contains("잠시 쇼츠를 잠가"));
+        assertTrue(GuardCopy.strong(0, f).contains("잠시 쇼츠를 잠가"));
+    }
 }

@@ -26,7 +26,7 @@ import org.json.JSONObject;
  * Entry (light / medium): [after-lock question] → method → reason → commitment → play.
  * Commitment over: [band went up → that band's activity] → kept (leave) or extend.
  * Strong: day end / lock / "3분만 더" (through a nudge screen) / leave.
- * Locked ("쇼츠 쉬는 중"): remaining time, rest so far, optionally one study card.
+ * Locked ("쇼츠 쉬는 중" / "릴스 쉬는 중"): remaining time, rest so far, optionally one study card.
  */
 final class GuardFlow {
     interface Host {
@@ -137,7 +137,7 @@ final class GuardFlow {
         remaining.setGravity(Gravity.CENTER);
         remaining.setPadding(0, overlay.dp(4), 0, overlay.dp(8));
         box.addView(remaining);
-        overlay.step(GuardCopy.LOCKED_TITLE, GuardCopy.locked(until - System.currentTimeMillis(), facts.restToday), box);
+        overlay.step(GuardCopy.lockedTitle(kind), GuardCopy.locked(until - System.currentTimeMillis(), facts.restToday), box);
         overlay.leave("나가기", () -> leaveQuietly(kind));
 
         JSONObject card = GuardState.nextCard(context, System.currentTimeMillis());
@@ -267,7 +267,7 @@ final class GuardFlow {
         if (policy.ai.enabled) {
             List<String> usable = new ArrayList<>();
             for (String kind : kinds) {
-                if (GuardCopy.insight(kind, facts) != null) usable.add(kind);
+                if (GuardCopy.insight(kind, facts, rec.kind) != null) usable.add(kind);
             }
             Calendar now = Calendar.getInstance();
             String kind = GuardBandit.pick(
@@ -281,12 +281,12 @@ final class GuardFlow {
             if (kind == null) return null;
             GuardState.markShown(context, "framing", kind, now.getTimeInMillis());
             rec.framing = kind;
-            return GuardCopy.insight(kind, facts);
+            return GuardCopy.insight(kind, facts, rec.kind);
         }
         int start = GuardState.nextIndex(context, "framing");
         for (int i = 0; i < kinds.size(); i++) {
             String kind = kinds.get(Math.floorMod(start + i, kinds.size()));
-            String line = GuardCopy.insight(kind, facts);
+            String line = GuardCopy.insight(kind, facts, rec.kind);
             if (line != null) {
                 rec.framing = kind;
                 return line;
@@ -556,7 +556,7 @@ final class GuardFlow {
             });
             chips.add(chip);
         }
-        overlay.step("왜 쇼츠를 보려고 하나요?", null, overlay.grid(chips, 2, 56));
+        overlay.step(GuardCopy.reasonTitle(rec.kind), null, overlay.grid(chips, 2, 56));
     }
 
     /** "몇 분 볼래요?" within the remaining budget and the extension ladder. */
@@ -635,7 +635,7 @@ final class GuardFlow {
         });
         if (!policy.ai.strict) box.addView(more);
 
-        String body = GuardCopy.strong(GuardState.nextIndex(context, "s3"), host.facts());
+        String body = GuardCopy.strong(GuardState.nextIndex(context, "s3"), host.facts(), rec.kind);
         overlay.step(GuardCopy.STRONG_TITLE, headline == null ? body : headline + " " + body, box);
     }
 
@@ -775,7 +775,7 @@ final class GuardFlow {
         }
         overlay.open();
         openPolicy = policy;
-        String notice = host.inPip() ? GuardCopy.PIP_NOTE : null;
+        String notice = host.inPip() ? GuardCopy.pipNote(kind) : null;
         if (notice == null && policy != null && policy.ai.isRiskHour(hourNow()) && !policy.ai.riskLabel.isEmpty()) {
             notice = GuardCopy.aiRiskNotice(policy.ai.riskLabel);
         }
