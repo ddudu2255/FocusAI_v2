@@ -1,246 +1,242 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GoalSuggestionCard } from "@/components/goal-suggestion";
-import { GuardPanel } from "@/components/guard-panel";
 import { useStore } from "@/components/store";
+import { TreeView } from "@/components/tree-view";
 import { useNow } from "@/components/use-now";
+import { HanbakjaGuard } from "@/lib/guard";
 import {
-  BAND_LABEL,
   blockRemainingSeconds,
   formatClock,
-  formatTime,
-  FRAMINGS,
-  goalRatio,
-  hourlyUsage,
-  insightFacts,
-  insightLine,
+  getMonthProgress,
+  goalMinutesOn,
   isBlocked,
-  isReportDue,
-  LEVEL_SUMMARY,
-  levelForUsage,
-  nextLevelGap,
-  OUTCOME_LABEL,
-  reasonLabel,
-  statsForDate,
+  pastMonthProgress,
   todayKey,
   usageSecondsOn,
+  type DayState,
 } from "@/lib/logic";
+import { ladder, stageForMonth, stageHint, STAGES } from "@/lib/tree";
+import { cn } from "@/lib/utils";
+
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+/** 개입 스위치 상태 (설정의 GuardPanel과 같은 방식). 확인 전에는 null. */
+function useBlockerEnabled(): boolean | null {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  useEffect(() => {
+    let stopped = false;
+    async function read() {
+      try {
+        const status = await HanbakjaGuard.getStatus();
+        if (!stopped) setEnabled(status.blockerEnabled);
+      } catch {
+        if (!stopped) setEnabled(true);
+      }
+    }
+    void read();
+    const id = window.setInterval(() => void read(), 2000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void read();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+  return enabled;
+}
+
+const DAY_CLASS: Record<DayState, string> = {
+  kept: "bg-[var(--leaf-1)]",
+  missed: "bg-muted-foreground/35",
+  future: "bg-muted",
+  before: "border border-dashed border-muted-foreground/30",
+};
 
 export function HomeView() {
   const router = useRouter();
   const { data } = useStore();
   const now = useNow();
-  if (!data) return null;
-
+  const blocker = useBlockerEnabled();
   const today = todayKey(new Date(now));
-  const seconds = usageSecondsOn(data, today);
-  const level = levelForUsage(seconds, data.settings);
-  const stats = statsForDate(data, today);
-  const gap = nextLevelGap(seconds, data.settings);
-  const blocked = isBlocked(data.block, now);
-  const remaining = blockRemainingSeconds(data.block, now);
-  const reportReady = isReportDue(data.settings.notificationTime, new Date(now));
-  const recent = data.interventions
-    .filter((log) => log.date === today)
-    .slice()
-    .reverse()
-    .slice(0, 3);
-  const goal = data.settings.level3Threshold;
-  const ratio = goalRatio(seconds, data.settings);
-  const percent = Math.round(ratio * 100);
-  const budgetLeft = goal * 60 - seconds;
-  // 막대 끝은 목표의 135%: 넘친 만큼도 보이게 한다. 50%·100% 지점에 강도 경계.
-  const scaleMax = 1.35;
-  const marker = Math.min(100, (ratio / scaleMax) * 100);
-  const l1Width = (0.5 / scaleMax) * 100;
-  const l2Width = (0.5 / scaleMax) * 100;
-  const l3Width = 100 - l1Width - l2Width;
-  const hours = hourlyUsage(data, today);
-  const peakHour = Math.max(...hours, 1);
-  // 시간 체감 문구: 하루 동안은 같은 종류를 쓰고, 숫자가 없는 종류는 건너뛴다.
-  const facts = insightFacts(data, new Date(now));
-  const framing =
-    FRAMINGS.map((_, i) => insightLine(FRAMINGS[(new Date(now).getDate() + i) % FRAMINGS.length], facts)).find(
-      (line): line is string => line !== null,
-    ) ?? null;
 
-  function openShorts() {
-    router.push("/watch");
-  }
+  // 달 계산은 기록이나 날짜가 바뀔 때만 다시 한다 (1초마다 다시 그리는 동안 매번 하지 않게).
+  const month = useMemo(() => (data ? getMonthProgress(data, new Date(now)) : null), [data, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  const past = useMemo(() => (data ? pastMonthProgress(data, new Date(now)) : []), [data, today]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!data || !month) return null;
+
+  const date = new Date(now);
+  const dateLine = `${date.getMonth() + 1}월 ${date.getDate()}일 ${WEEKDAYS[date.getDay()]}요일`;
+  const goal = goalMinutesOn(data, today);
+  const usage = usageSecondsOn(data, today);
+  const over = usage > goal * 60;
+  const leftMinutes = Math.max(1, Math.ceil((goal * 60 - usage) / 60));
+  const blocked = isBlocked(data.block, now);
+
+  const stage = stageForMonth(month.keptDays, month.countedDays, month.elapsedDays);
+  const left = month.countedDays - month.elapsedDays;
+  const hint = stageHint(month.keptDays, month.countedDays, month.elapsedDays);
+  const steps = ladder(month.countedDays > 0 ? month.countedDays : month.monthDays);
+
+  const todayLogs = data.interventions.filter((log) => log.date === today);
+  const exits = todayLogs.filter((log) => log.outcome === "exit").length;
+  const commitEnds = todayLogs.filter((log) => log.stage === "commit_end");
+  const kept = commitEnds.filter((log) => log.outcome === "kept").length;
+  const reopened = todayLogs.filter((log) => log.reenteredWithin30 === true).length;
+
+  const forest = past.map((p) => ({
+    label: `${p.month}월`,
+    stage: p.hasRecords ? stageForMonth(p.keptDays, p.countedDays, p.elapsedDays) : 0,
+  }));
+  const grown = forest.filter((m) => m.stage >= 1).length;
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex items-end justify-between gap-3">
-        <div>
-          <p className="text-sm text-muted-foreground">YouTube Shorts · Instagram Reels</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Focus on</h1>
+    <div className="mx-auto flex w-full max-w-md flex-col gap-3">
+      <header className="mb-1 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[13px] text-muted-foreground">{dateLine}</p>
+          <h1 className={cn("mt-0.5 text-[27px] font-bold tracking-tight text-balance", over && "text-level-2")}>
+            {over ? "오늘 목표를 넘었어요" : `오늘 ${leftMinutes}분 남았어요`}
+          </h1>
         </div>
-        <Badge variant={level === 3 ? "destructive" : "secondary"}>
-          {BAND_LABEL[level]}
-        </Badge>
+        <button
+          type="button"
+          onClick={() => router.push("/settings")}
+          className={cn(
+            "mt-1 shrink-0 rounded-full px-2.5 py-1 text-[12.5px] font-semibold",
+            blocker === false
+              ? "bg-muted text-muted-foreground"
+              : "bg-[color-mix(in_srgb,var(--leaf-1)_14%,transparent)] text-[var(--leaf-2)]",
+            blocker === null && "opacity-0",
+          )}
+        >
+          {blocker === false ? "개입 꺼짐" : "개입 켜짐"}
+        </button>
       </header>
+
+      {blocked ? (
+        <p className="rounded-2xl bg-destructive/10 px-4 py-2.5 text-sm text-destructive tabular-nums" role="status">
+          쇼츠 쉬는 중 · 남은 시간 {formatClock(blockRemainingSeconds(data.block, now))}
+        </p>
+      ) : null}
 
       <GoalSuggestionCard />
 
-      <GuardPanel />
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
-        <Card className="gap-5">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              오늘 목표의 {percent}% 사용
-            </CardTitle>
-            <p className="text-4xl font-semibold tracking-tight tabular-nums">
-              {budgetLeft > 0 ? `${formatClock(budgetLeft)} 남음` : `${formatClock(-budgetLeft)} 넘음`}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              오늘 {formatClock(seconds)} / 목표 {goal}분 · {LEVEL_SUMMARY[level]}
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div
-              className="relative h-3 overflow-hidden rounded-full bg-muted"
-              role="img"
-              aria-label={`오늘 목표의 ${percent}% 사용. 목표의 절반부터 중간, 목표를 넘으면 강함입니다.`}
-            >
-              <div className="absolute inset-0 flex">
-                <div className="h-full bg-level-1/80" style={{ width: `${l1Width}%` }} />
-                <div className="h-full bg-level-2/85" style={{ width: `${l2Width}%` }} />
-                <div className="h-full bg-level-3/85" style={{ width: `${l3Width}%` }} />
-              </div>
-              <div
-                className="absolute top-1/2 size-4 -translate-y-1/2 rounded-full border-2 border-background bg-foreground shadow"
-                style={{ left: `clamp(0px, calc(${marker}% - 8px), calc(100% - 16px))` }}
-              />
-            </div>
-            <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
-              <span>0분</span>
-              <span>절반 {Math.round(goal / 2)}분</span>
-              <span>목표 {goal}분</span>
-            </div>
-            <p className="text-sm">
-              {gap
-                ? `${gap.label} ${formatClock(gap.remainSeconds)} 남았어요.`
-                : "오늘 목표를 넘었어요. 다음에 열면 오늘을 마무리할지 고르게 돼요."}
-            </p>
-            {framing ? <p className="text-sm text-muted-foreground">{framing}</p> : null}
-            <div aria-label="오늘 시간대별 시청" role="img">
-              <div className="flex h-12 items-end gap-[2px]">
-                {hours.map((value, hour) => (
-                  <span
-                    key={hour}
-                    title={`${hour}시 ${formatClock(value)}`}
-                    className={value > 0 ? "flex-1 rounded-sm bg-primary/80" : "flex-1 rounded-sm bg-muted"}
-                    style={{ height: `${Math.max(6, (value / peakHour) * 100)}%` }}
-                  />
-                ))}
-              </div>
-              <div className="mt-1 flex justify-between text-[10px] text-muted-foreground tabular-nums">
-                <span>0시</span>
-                <span>6시</span>
-                <span>12시</span>
-                <span>18시</span>
-                <span>24시</span>
-              </div>
-            </div>
-            {blocked ? (
-              <div className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm">
-                <p className="font-medium text-destructive">쇼츠 열기가 차단되어 있습니다</p>
-                <p className="mt-1 tabular-nums text-foreground">
-                  남은 시간 {formatClock(remaining)}
-                </p>
-              </div>
-            ) : null}
-            <Button
-              type="button"
-              className="h-12 w-full text-base"
-              onClick={openShorts}
-            >
-              {blocked ? "차단 상태 보기" : "쇼츠 열기"}
-            </Button>
-            <p className="text-xs leading-5 text-muted-foreground">
-              이 버튼은 연습입니다. 안드로이드에서 접근성을 켜면 실제 YouTube
-              Shorts와 Instagram Reels 화면에서 같은 개입이 열립니다.
-            </p>
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-          <Card size="sm">
-            <CardHeader>
-              <CardTitle>오늘의 개입</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-3 gap-2 text-center">
-              <Stat label="스스로 멈춤" value={`${stats.selfStopCount}번`} />
-              <Stat label="쉰 시간" value={stats.restSeconds >= 60 ? formatClock(stats.restSeconds) : "0분"} />
-              <Stat label="잠금 연속" value={`${stats.lockStreak}일`} />
-            </CardContent>
-          </Card>
-          <Card size="sm">
-            <CardHeader>
-              <CardTitle>일일 리포트</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p>
-                {reportReady
-                  ? "오늘의 리포트를 볼 수 있습니다."
-                  : `${data.settings.notificationTime}에 하루를 정리합니다.`}
-              </p>
-              <Button variant="outline" className="h-10" onClick={() => router.push("/report")}>
-                리포트 열기
-              </Button>
-            </CardContent>
-          </Card>
+      <section className="overflow-hidden rounded-3xl bg-card ring-1 ring-foreground/10">
+        <div className="relative bg-gradient-to-b from-[var(--sky-2)] to-[var(--sky-1)]">
+          <TreeView stage={stage} title={`이번 달 나무: ${STAGES[stage].name}`} className="block h-auto w-full" />
+          <span className="absolute top-3 left-3 rounded-full bg-card/70 px-3 py-1 text-[13px] font-bold backdrop-blur-md">
+            {STAGES[stage].name}
+          </span>
         </div>
-      </div>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">최근 개입</h2>
-        {recent.length === 0 ? (
-          <Card>
-            <CardContent className="py-8 text-sm leading-6 text-muted-foreground">
-              아직 오늘 쇼츠를 열지 않았습니다. 열면 이유와 레벨, 그다음 선택이
-              여기에 남습니다.
-            </CardContent>
-          </Card>
-        ) : (
-          <ul className="space-y-2">
-            {recent.map((log) => (
+        <div className="px-4 pt-3.5">
+          <p className="mb-3 text-[15px]">{hint}</p>
+          <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}>
+            {month.dayStates.map((state, i) => (
+              <span key={i} className={cn("aspect-square rounded-[3px]", DAY_CLASS[state])} />
+            ))}
+          </div>
+          <div className="flex justify-between gap-2.5 pt-2.5 pb-3.5 text-xs text-muted-foreground">
+            <span>
+              지킨 날 <b className="font-semibold text-foreground tabular-nums">{month.keptDays}일</b>
+              {month.missedDays > 0 ? (
+                <>
+                  {" · 놓친 날 "}
+                  <b className="font-semibold text-foreground tabular-nums">{month.missedDays}일</b>
+                </>
+              ) : null}
+            </span>
+            <span>
+              {left > 0 ? (
+                <>
+                  남은 날 <b className="font-semibold text-foreground tabular-nums">{left}일</b>
+                </>
+              ) : (
+                "이번 달 끝"
+              )}
+            </span>
+          </div>
+        </div>
+        <details className="group border-t border-border/70">
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            단계 기준 보기 <span className="inline-block transition-transform group-open:rotate-90">›</span>
+          </summary>
+          <ul className="pb-2">
+            {steps.map((step) => (
               <li
-                key={log.interventionId}
-                className="rounded-2xl bg-card px-4 py-3 ring-1 ring-foreground/10"
+                key={step.index}
+                className={cn(
+                  "grid grid-cols-[9px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2",
+                  stage === step.index && "bg-[color-mix(in_srgb,var(--leaf-1)_10%,transparent)]",
+                )}
               >
-                <div className="flex items-baseline justify-between gap-3">
-                  <p className="font-medium">
-                    Level {log.level} · {reasonLabel(log)}
-                  </p>
-                  <time className="text-xs text-muted-foreground tabular-nums" dateTime={log.timestamp}>
-                    {formatTime(log.timestamp)}
-                  </time>
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {OUTCOME_LABEL[log.outcome]}
-                  {log.alternativeAction ? ` · ${log.alternativeAction}` : ""}
-                  {log.alternativeCompleted ? " · 수행함" : ""}
-                </p>
+                <span className={cn("size-[9px] rounded-full", stage >= step.index ? "bg-[var(--leaf-1)]" : "bg-muted")} />
+                <span className={cn("text-[14.5px]", stage === step.index && "font-bold")}>{step.name}</span>
+                <span className="text-[12.5px] text-muted-foreground tabular-nums">{step.cond}</span>
               </li>
             ))}
           </ul>
-        )}
+        </details>
+      </section>
+
+      <section className="rounded-3xl bg-card p-4 ring-1 ring-foreground/10">
+        <div className="flex items-end justify-between gap-2.5">
+          <div>
+            <p className="mb-0.5 text-[13px] font-semibold text-muted-foreground">오늘 사용</p>
+            <p className="text-[34px] leading-none font-bold tracking-tight tabular-nums">
+              {Math.floor(usage / 60)}
+              <small className="ml-0.5 text-[17px] font-semibold text-muted-foreground">분</small>
+            </p>
+          </div>
+          <p className="mb-0.5 text-[13px] text-muted-foreground">목표 {goal}분</p>
+        </div>
+        <span className="mt-3 block h-2.5 overflow-hidden rounded-full bg-muted">
+          <span
+            className={cn("block h-full rounded-full transition-[width] duration-500", over ? "bg-level-2" : "bg-primary")}
+            style={{ width: `${Math.min(100, (usage / (goal * 60)) * 100)}%` }}
+          />
+        </span>
+        <div className="mt-3.5 grid grid-cols-3 gap-2">
+          <Tile value={`${exits}`} unit="회" label="바로 나감" />
+          <Tile value={`${kept}`} unit={`/${commitEnds.length}`} label="약속 지킴" />
+          <Tile value={`${reopened}`} unit="회" label="다시 열기" />
+        </div>
+      </section>
+
+      <section className="rounded-3xl bg-card p-4 ring-1 ring-foreground/10">
+        <div className="mb-2.5 flex items-baseline justify-between gap-2.5">
+          <p className="text-[13px] font-semibold text-muted-foreground">지난 달의 숲</p>
+          <span className="text-[12.5px] text-muted-foreground">나무 {grown}그루</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2.5">
+          {forest.map((m) => (
+            <div key={m.label} className="overflow-hidden rounded-xl bg-gradient-to-b from-[var(--sky-2)] to-[var(--sky-1)] text-center">
+              <TreeView stage={m.stage} sway={false} title={`${m.label} ${STAGES[m.stage].name}`} className="block h-auto w-full" />
+              <span className="block bg-muted px-0.5 pt-1 pb-1.5 text-[11.5px] text-muted-foreground">
+                {m.label} <b className="font-semibold text-foreground">{STAGES[m.stage].name}</b>
+              </span>
+            </div>
+          ))}
+        </div>
       </section>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Tile({ value, unit, label }: { value: string; unit: string; label: string }) {
   return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
+    <div className="rounded-xl bg-muted px-2 py-2.5 text-center">
+      <b className="block text-xl font-bold tracking-tight tabular-nums">
+        {value}
+        <i className="ml-px text-[13px] font-semibold not-italic text-muted-foreground">{unit}</i>
+      </b>
+      <span className="mt-0.5 block text-[11.5px] text-muted-foreground">{label}</span>
     </div>
   );
 }

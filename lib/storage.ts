@@ -3,6 +3,7 @@ import type {
   ActiveSession,
   AppData,
   BlockState,
+  GoalChange,
   InterventionLog,
   InterventionType,
   LockAttempt,
@@ -51,17 +52,19 @@ export function settingsFromGoal(
     | "goalWeekAnswered"
   >,
 ): Settings {
+  // rest에 설정 전체가 와도 목표로 계산한 단계 기준이 이기도록 뒤에 둔다.
   return {
+    ...rest,
     level1Threshold: Math.max(1, Math.round(goal / 2)),
     level2Threshold: goal,
     level3Threshold: goal,
-    ...rest,
   };
 }
 
 export function defaultData(): AppData {
   return {
     settings: defaultSettings(),
+    goalLog: [],
     usageLogs: [],
     interventions: [],
     lockAttempts: [],
@@ -266,6 +269,19 @@ export function readSettings(value: unknown): Settings {
   return { ...settings, finalGoal: Math.min(settings.finalGoal, goal) };
 }
 
+/** 목표 기록. 형식이 틀린 줄은 버린다. */
+export function readGoalLog(value: unknown): GoalChange[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const raw = row as Partial<GoalChange>;
+    if (typeof raw.from !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(raw.from)) return [];
+    const minutes = Number(raw.minutes);
+    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 360) return [];
+    return [{ from: raw.from, minutes: Math.round(minutes) }];
+  });
+}
+
 export function readBlock(value: unknown): BlockState {
   if (!value || typeof value !== "object") return { until: null, minutes: 0 };
   const raw = value as Partial<BlockState>;
@@ -312,6 +328,7 @@ export function normalizeData(value: unknown): AppData | null {
   if (!Array.isArray(raw.usageLogs) || !Array.isArray(raw.interventions)) return null;
   return {
     settings: readSettings(raw.settings),
+    goalLog: readGoalLog(raw.goalLog),
     usageLogs: readAll(raw.usageLogs, readUsageLog),
     interventions: readAll(raw.interventions, readIntervention),
     lockAttempts: readAll(raw.lockAttempts, readLockAttempt),

@@ -84,6 +84,19 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /* 이번 달의 나무 (docs/design/home-screen-mockup.html) */
+  --leaf-1: #3fb964;
+  --leaf-2: #2d9b52;
+  --leaf-3: #74d089;
+  --trunk: #9c7a55;
+  --bark: #6f5438;
+  --sky-1: #d9f0ff;
+  --sky-2: #f3fbff;
+  --soil: #e3d7c6;
+  --soil-2: #cdbca5;
+  --sun: #ffd79a;
+  --fruit: #ff9500;
+  --glow: #ffe9a8;
 }
 
 .dark {
@@ -118,6 +131,18 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --leaf-1: #34b35e;
+  --leaf-2: #27904a;
+  --leaf-3: #5cc077;
+  --trunk: #8a6949;
+  --bark: #5b442e;
+  --sky-1: #15324a;
+  --sky-2: #0e1f2e;
+  --soil: #3a3228;
+  --soil-2: #2a241c;
+  --sun: #d8c08a;
+  --fruit: #ff9f0a;
+  --glow: #ffdf8a;
 }
 
 @layer base {
@@ -133,4 +158,32 @@
   ::selection {
     background: oklch(0.86 0.05 40);
   }
+}
+/* 이번 달의 나무: 천천히 흔들기, 잎·열매 등장, 세계수 반짝임 */
+.tree-sway {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: tree-sway 6s ease-in-out infinite;
+}
+@keyframes tree-sway {
+  0%, 100% { transform: rotate(-1deg); }
+  50% { transform: rotate(1deg); }
+}
+.tree-pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tree-pop 0.55s cubic-bezier(0.3, 1.5, 0.5, 1) backwards;
+}
+@keyframes tree-pop {
+  from { transform: scale(0); opacity: 0; }
+}
+.tree-twinkle {
+  animation: tree-twinkle 2.6s ease-in-out infinite;
+}
+@keyframes tree-twinkle {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.9; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tree-sway, .tree-pop, .tree-twinkle { animation: none; }
 }

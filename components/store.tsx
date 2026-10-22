@@ -17,6 +17,7 @@ import {
   convertNativeBatch,
   finalizeSession,
   isReportDue,
+  nextGoalLog,
   reportLines,
   settleReentry,
   statsForDate,
@@ -187,10 +188,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const saveSettings = useCallback(
     (settings: Settings) => {
-      fire((current) => ({
-        next: { ...current, settings },
-        ops: [{ kind: "settings", settings }],
-      }));
+      fire((current) => {
+        // 목표를 바꾸면 날짜별 목표 기록에 남긴다 (나무의 지킨 날 판정용).
+        const goalLog = nextGoalLog(current, settings.level3Threshold);
+        return {
+          next: { ...current, settings, goalLog: goalLog ?? current.goalLog },
+          ops: [
+            { kind: "settings", settings },
+            ...(goalLog ? [{ kind: "goalLog" as const, log: goalLog }] : []),
+          ],
+        };
+      });
     },
     [fire],
   );

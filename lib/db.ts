@@ -12,6 +12,7 @@ import {
   readLocalStorage,
   readLockAttempt,
   readSession,
+  readGoalLog,
   readSettings,
   readUsageLog,
   STORAGE_KEY,
@@ -335,6 +336,7 @@ export type Op =
   | { kind: "card"; row: StudyCard }
   | { kind: "deleteCard"; id: string }
   | { kind: "settings"; settings: Settings }
+  | { kind: "goalLog"; log: AppData["goalLog"] }
   | { kind: "block"; block: AppData["block"] }
   | { kind: "activeSession"; session: AppData["activeSession"] }
   | { kind: "lastNotifiedDate"; date: string | null }
@@ -354,6 +356,8 @@ function statementsFor(op: Op): Statement[] {
       return [{ statement: "DELETE FROM cards WHERE id = ?", values: [op.id] }];
     case "settings":
       return [settingRow("settings", op.settings)];
+    case "goalLog":
+      return [settingRow("goalLog", op.log)];
     case "block":
       return [settingRow("block", op.block)];
     case "activeSession":
@@ -397,6 +401,7 @@ export async function loadAll(): Promise<AppData> {
   const base = defaultData();
   return {
     settings: meta.has("settings") ? readSettings(meta.get("settings")) : base.settings,
+    goalLog: readGoalLog(meta.get("goalLog")),
     usageLogs: keep(sessions.values, fromSessionRow),
     interventions: keep(interventions.values, fromInterventionRow),
     lockAttempts: keep(locks.values, fromLockRow),
@@ -422,6 +427,7 @@ export async function migrateFromLocalStorage(): Promise<number> {
   const ops: Op[] = [];
   if (data) {
     ops.push({ kind: "settings", settings: data.settings });
+    ops.push({ kind: "goalLog", log: data.goalLog });
     ops.push({ kind: "block", block: data.block });
     ops.push({ kind: "lastNotifiedDate", date: data.lastNotifiedDate });
     for (const row of data.usageLogs) ops.push({ kind: "session", row });

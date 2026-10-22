@@ -1,0 +1,306 @@
+<title>ShortsAI 홈 화면</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: a phone-width column — this month's tree, the day strip that grew it, today's numbers, then past months. */
+:root {
+  --bg: #f2f2f7; --card: #ffffff; --fill: #78788033;
+  --label: #000; --label-2: #3c3c4399; --label-3: #3c3c434d; --sep: #3c3c4336;
+  --blue: #007aff; --green: #34c759; --orange: #ff9500;
+  --sky-1: #d9f0ff; --sky-2: #f3fbff; --soil: #e3d7c6; --soil-2: #cdbca5; --sun: #ffd79a;
+  --trunk: #9c7a55; --bark: #6f5438; --leaf-1: #3fb964; --leaf-2: #2d9b52; --leaf-3: #74d089;
+  --fruit: #ff9500; --glow: #ffe9a8;
+  --shadow: 0 1px 3px rgb(0 0 0 / .06), 0 8px 28px rgb(0 0 0 / .05);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", "Pretendard", system-ui, "Malgun Gothic", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000; --card: #1c1c1e; --fill: #7878805c; --label: #fff; --label-2: #ebebf599; --label-3: #ebebf54d;
+    --sep: #54545899; --blue: #0a84ff; --green: #30d158; --orange: #ff9f0a;
+    --sky-1: #15324a; --sky-2: #0e1f2e; --soil: #3a3228; --soil-2: #2a241c; --sun: #d8c08a;
+    --trunk: #8a6949; --bark: #5b442e; --leaf-1: #34b35e; --leaf-2: #27904a; --leaf-3: #5cc077;
+    --fruit: #ff9f0a; --glow: #ffdf8a; --shadow: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #000; --card: #1c1c1e; --fill: #7878805c; --label: #fff; --label-2: #ebebf599; --label-3: #ebebf54d;
+  --sep: #54545899; --blue: #0a84ff; --green: #30d158; --orange: #ff9f0a;
+  --sky-1: #15324a; --sky-2: #0e1f2e; --soil: #3a3228; --soil-2: #2a241c; --sun: #d8c08a;
+  --trunk: #8a6949; --bark: #5b442e; --leaf-1: #34b35e; --leaf-2: #27904a; --leaf-3: #5cc077;
+  --fruit: #ff9f0a; --glow: #ffdf8a; --shadow: none; color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body {
+  background: var(--bg); color: var(--label); font-family: var(--font); font-size: 17px; line-height: 1.4; letter-spacing: -0.01em;
+  padding-block: 14px 28px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.screen { max-width: 420px; margin: 0 auto; }
+.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.hello { font-size: 13px; color: var(--label-2); margin: 0; }
+h1 { font-size: 27px; font-weight: 700; letter-spacing: -0.028em; margin: 1px 0 0; text-wrap: balance; }
+.pill { flex: none; font-size: 12.5px; font-weight: 600; color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); border-radius: 99px; padding: 5px 10px; margin-top: 4px; }
+.card { background: var(--card); border-radius: 18px; box-shadow: var(--shadow); margin-top: 12px; overflow: hidden; }
+.card:first-of-type { margin-top: 0; }
+.pad { padding: 16px; }
+.eyebrow { font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--label-2); margin: 0 0 10px; }
+
+.yard { position: relative; background: linear-gradient(180deg, var(--sky-2), var(--sky-1)); overflow: hidden; }
+.yard svg { display: block; width: 100%; height: auto; }
+.badge { position: absolute; top: 12px; left: 12px; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; color: var(--label); background: color-mix(in srgb, var(--card) 72%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 99px; padding: 5px 12px; }
+#sway { transform-box: fill-box; transform-origin: 50% 100%; animation: sway 6s ease-in-out infinite; }
+@keyframes sway { 0%,100% { transform: rotate(-1deg) } 50% { transform: rotate(1deg) } }
+.pop { transform-box: fill-box; transform-origin: center; animation: pop .55s cubic-bezier(.3,1.5,.5,1) backwards; }
+@keyframes pop { from { transform: scale(0); opacity: 0 } }
+.twinkle { animation: tw 2.6s ease-in-out infinite; }
+@keyframes tw { 0%,100% { opacity: .25 } 50% { opacity: .9 } }
+
+.under { padding: 14px 16px 2px; }
+.stagesub { font-size: 15px; margin: 0 0 12px; }
+.strip { display: grid; grid-template-columns: repeat(15, 1fr); gap: 4px; }
+.d { aspect-ratio: 1; border-radius: 3px; background: var(--fill); }
+.d.k { background: var(--green); }
+.d.m { background: var(--label-3); }
+.striptext { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--label-2); padding: 10px 0 14px; }
+.striptext b { color: var(--label); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.drop { border-top: 0.5px solid var(--sep); }
+.drop summary { list-style: none; cursor: pointer; font-size: 14px; color: var(--blue); padding: 12px 16px; }
+.drop summary::-webkit-details-marker { display: none; }
+.drop summary::after { content: " ›"; }
+.drop[open] summary::after { content: " ⌄"; }
+.drop summary:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.step { display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 8px 16px; }
+.step .pin { width: 9px; height: 9px; border-radius: 50%; background: var(--fill); }
+.step.done .pin { background: var(--green); }
+.step .nm { font-size: 14.5px; }
+.step.now .nm { font-weight: 700; }
+.step.now { background: color-mix(in srgb, var(--green) 9%, transparent); }
+.step .cond { font-size: 12.5px; color: var(--label-2); font-variant-numeric: tabular-nums; }
+
+.todayhead { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
+.mins { font-size: 34px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; margin: 0; line-height: 1.05; }
+.mins small { font-size: 17px; font-weight: 600; color: var(--label-2); margin-left: 2px; }
+.goaltxt { font-size: 13px; color: var(--label-2); margin: 0 0 3px; }
+.track { display: block; height: 10px; border-radius: 99px; background: var(--fill); overflow: hidden; margin-top: 12px; }
+.fill { display: block; height: 100%; border-radius: 99px; background: var(--blue); transition: width .4s ease; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+.tile { background: var(--fill); border-radius: 12px; padding: 10px 8px; text-align: center; }
+.tile b { display: block; font-size: 20px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.tile b i { font-style: normal; font-size: 13px; font-weight: 600; color: var(--label-2); margin-left: 1px; }
+.tile span { display: block; font-size: 11.5px; color: var(--label-2); margin-top: 2px; }
+
+.foresthead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.count { font-size: 12.5px; color: var(--label-2); }
+.forest { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.mini { border-radius: 12px; overflow: hidden; text-align: center; background: linear-gradient(180deg, var(--sky-2), var(--sky-1)); }
+.mini svg { display: block; width: 100%; height: auto; }
+.mini span { display: block; font-size: 11.5px; color: var(--label-2); padding: 5px 2px 6px; background: var(--fill); }
+.mini b { color: var(--label); font-weight: 600; }
+
+.demo { margin-top: 20px; border-top: 0.5px solid var(--sep); padding-top: 14px; }
+.demo p { font-size: 12px; color: var(--label-2); margin: 0 0 10px; }
+.demorow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.demorow input { width: 100%; accent-color: var(--green); }
+.demorow input:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.demoval { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { #sway, .pop, .twinkle { animation: none } }
+</style>
+
+<div class="screen">
+  <header class="top">
+    <div>
+      <p class="hello" id="hello">10월</p>
+      <h1>오늘 <span id="leftMin">18분</span> 남았어요</h1>
+    </div>
+    <span class="pill" id="guardPill">개입 켜짐</span>
+  </header>
+
+  <section class="card">
+    <div class="yard">
+      <svg id="tree" viewBox="0 0 200 168" role="img" aria-labelledby="treeLab"></svg>
+      <span class="badge" id="stageBadge">나무</span>
+    </div>
+    <div class="under">
+      <p class="stagesub" id="stageSub"></p>
+      <div class="strip" id="strip"></div>
+      <div class="striptext"><span id="sL"></span><span id="sR"></span></div>
+    </div>
+    <details class="drop">
+      <summary>단계 기준 보기</summary>
+      <div id="ladder"></div>
+    </details>
+  </section>
+
+  <section class="card pad">
+    <div class="todayhead">
+      <div>
+        <p class="eyebrow" style="margin:0 0 3px">오늘 사용</p>
+        <p class="mins" id="usedMin">42<small>분</small></p>
+      </div>
+      <p class="goaltxt">목표 60분</p>
+    </div>
+    <span class="track"><span class="fill" id="todayFill" style="width:70%"></span></span>
+    <div class="tiles">
+      <div class="tile"><b>4<i>회</i></b><span>바로 나감</span></div>
+      <div class="tile"><b>3<i>/4</i></b><span>약속 지킴</span></div>
+      <div class="tile"><b>2<i>회</i></b><span>다시 열기</span></div>
+    </div>
+  </section>
+
+  <section class="card pad">
+    <div class="foresthead">
+      <p class="eyebrow" style="margin:0">지난 달의 숲</p>
+      <span class="count" id="forestCount">나무 3그루</span>
+    </div>
+    <div class="forest" id="forest"></div>
+  </section>
+
+  <div class="demo">
+    <p>시안 미리보기 — 30일 달 기준으로 며칠 지켰는지 움직여 보세요.</p>
+    <div class="demorow">
+      <input type="range" id="kept" min="0" max="30" value="22" aria-label="이번 달 목표를 지킨 날">
+      <span class="demoval" id="keptVal">22일</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var $ = function (i) { return document.getElementById(i); };
+  var DAYS = 30, ELAPSED = 27;
+
+  function rng(s) { return function () { s |= 0; s = s + 0x6D2B79F5 | 0; var t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function blob(cx, cy, rx, ry, n, amp, seed) {
+    var r = rng(seed), pts = [], i;
+    for (i = 0; i < n; i++) { var a = i / n * Math.PI * 2, k = 1 + (r() - .5) * amp; pts.push([cx + Math.cos(a) * rx * k, cy + Math.sin(a) * ry * k]); }
+    var mid = function (p, q) { return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; };
+    var m0 = mid(pts[n - 1], pts[0]), d = 'M' + m0[0].toFixed(1) + ' ' + m0[1].toFixed(1);
+    for (i = 0; i < n; i++) { var p = pts[i], m = mid(p, pts[(i + 1) % n]); d += 'Q' + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + ' ' + m[0].toFixed(1) + ' ' + m[1].toFixed(1); }
+    return d + 'Z';
+  }
+  function canopy(cl, seed, delay) {
+    var s = '', i;
+    for (i = 0; i < cl.length; i++) s += '<path d="' + blob(cl[i][0] + 2, cl[i][1] + 4, cl[i][2], cl[i][2] * .82, 11, .3, seed + i) + '" fill="var(--leaf-2)"/>';
+    for (i = 0; i < cl.length; i++) s += '<path class="pop" style="animation-delay:' + (delay + i * 60) + 'ms" d="' + blob(cl[i][0], cl[i][1], cl[i][2], cl[i][2] * .84, 12, .28, seed + 50 + i) + '" fill="var(--leaf-1)"/>';
+    for (i = 0; i < cl.length; i++) s += '<path d="' + blob(cl[i][0] - cl[i][2] * .3, cl[i][1] - cl[i][2] * .35, cl[i][2] * .45, cl[i][2] * .34, 9, .34, seed + 90 + i) + '" fill="var(--leaf-3)" opacity=".75"/>';
+    return s;
+  }
+  function trunk(h, w, flare) {
+    var top = 150 - h, half = w / 2, f = flare || 4;
+    return '<path d="M' + (100 - half - f) + ' 151 C' + (100 - half + 1) + ' ' + (151 - h * .45) + ' ' + (100 - half * .55) + ' ' + (top + h * .3) + ' ' + (100 - half * .42) + ' ' + top +
+      ' L' + (100 + half * .42) + ' ' + top + ' C' + (100 + half * .5) + ' ' + (top + h * .35) + ' ' + (100 + half - 1) + ' ' + (151 - h * .4) + ' ' + (100 + half + f) + ' 151 Z" fill="var(--trunk)"/>' +
+      '<path d="M' + (100 - half * .25) + ' ' + (top + 4) + ' C' + (100 - half * .5) + ' ' + (151 - h * .5) + ' ' + (100 - half * .3) + ' ' + (151 - h * .22) + ' ' + (100 - half * .6) + ' 148" fill="none" stroke="var(--bark)" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>';
+  }
+  function branch(x1, y1, x2, y2, w) { return '<path d="M' + x1 + ' ' + y1 + ' Q' + ((x1 + x2) / 2 + (x2 - x1) * .1) + ' ' + (y1 - 6) + ' ' + x2 + ' ' + y2 + '" fill="none" stroke="var(--trunk)" stroke-width="' + w + '" stroke-linecap="round"/>'; }
+  function fruits(list) {
+    var s = '';
+    list.forEach(function (f, i) {
+      s += '<circle class="pop" style="animation-delay:' + (420 + i * 70) + 'ms" cx="' + f[0] + '" cy="' + f[1] + '" r="4.4" fill="var(--fruit)"/><circle cx="' + (f[0] - 1.3) + '" cy="' + (f[1] - 1.5) + '" r="1.4" fill="#fff" opacity=".45"/>';
+    });
+    return s;
+  }
+
+  var STAGES = [
+    { name: '씨앗', note: '아직 심기 전이에요', art: function () {
+      return '<ellipse cx="100" cy="147" rx="13" ry="4.5" fill="var(--soil-2)"/><path d="M100 138c4 0 6.5 3 6.5 6s-3 5.5-6.5 5.5-6.5-2.5-6.5-5.5 2.5-6 6.5-6z" fill="var(--bark)"/>';
+    } },
+    { name: '새싹', note: '싹이 났어요', art: function () {
+      return '<path d="M100 150C99 142 100 136 100 130" stroke="var(--leaf-2)" stroke-width="3" fill="none" stroke-linecap="round"/>' +
+        '<path class="pop" d="M100 134c-3-7-9-9-13-7 .5 6 6 9 13 7z" fill="var(--leaf-1)"/><path class="pop" style="animation-delay:110ms" d="M100 130c3-8 10-10 14-7-.5 7-6 10-14 7z" fill="var(--leaf-3)"/>';
+    } },
+    { name: '떡잎', note: '잎이 자리를 잡았어요', art: function () {
+      return trunk(28, 7) + branch(100, 128, 90, 120, 3) + branch(100, 132, 111, 123, 3) + canopy([[100, 112, 13], [87, 120, 9], [113, 119, 10]], 7, 0);
+    } },
+    { name: '어린나무', note: '제법 나무 같아졌어요', art: function () {
+      return trunk(48, 11) + branch(99, 122, 84, 110, 4.5) + branch(101, 116, 117, 105, 4.5) + canopy([[100, 96, 20], [80, 106, 14], [119, 101, 15]], 21, 0);
+    } },
+    { name: '나무', note: '튼튼하게 자랐어요', art: function () {
+      return trunk(68, 15) + branch(98, 116, 76, 100, 6) + branch(102, 108, 125, 93, 6) + branch(100, 98, 90, 86, 4.5) +
+        canopy([[100, 78, 25], [73, 94, 18], [127, 88, 19], [85, 72, 15], [117, 70, 14]], 33, 0);
+    } },
+    { name: '어른나무', note: '열매가 열렸어요', art: function () {
+      return trunk(80, 19, 6) + branch(97, 112, 68, 94, 7) + branch(103, 102, 132, 85, 7) + branch(100, 90, 86, 74, 5.5) +
+        canopy([[100, 66, 29], [66, 88, 20], [134, 80, 21], [80, 60, 17], [122, 58, 16]], 51, 0) +
+        fruits([[72, 95], [128, 86], [100, 44], [114, 66], [84, 68], [106, 90]]);
+    } },
+    { name: '세계수', note: '한 달 내내 지켰어요', art: function () {
+      var s = '<defs><radialGradient id="ggl"><stop offset="0" stop-color="var(--glow)" stop-opacity=".45"/><stop offset="1" stop-color="var(--glow)" stop-opacity="0"/></radialGradient></defs>' +
+        '<circle cx="100" cy="72" r="86" fill="url(#ggl)"/>';
+      s += trunk(96, 27, 11);
+      s += '<path d="M78 151c6-9 12-13 18-15M122 151c-6-9-12-13-18-15" stroke="var(--trunk)" stroke-width="8" fill="none" stroke-linecap="round"/>';
+      s += branch(95, 110, 56, 88, 8.5) + branch(105, 98, 146, 76, 8.5) + branch(97, 86, 70, 62, 6.5) + branch(103, 76, 128, 52, 6.5);
+      s += canopy([[100, 50, 33], [56, 82, 23], [146, 72, 24], [70, 50, 20], [132, 42, 20], [100, 92, 17], [38, 102, 14], [162, 96, 14]], 77, 0);
+      s += fruits([[58, 90], [144, 80], [100, 24], [124, 46], [72, 40], [100, 98], [40, 106]]);
+      [[26, 44, 2.6], [176, 54, 2.2], [52, 20, 2], [150, 16, 2.4], [14, 80, 2]].forEach(function (t, i) {
+        s += '<circle class="twinkle" style="animation-delay:' + i * 420 + 'ms" cx="' + t[0] + '" cy="' + t[1] + '" r="' + t[2] + '" fill="var(--glow)"/>';
+      });
+      return s;
+    } }
+  ];
+  function scene() {
+    return '<defs><linearGradient id="gsoil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--soil)"/><stop offset="1" stop-color="var(--soil-2)"/></linearGradient></defs>' +
+      '<circle cx="32" cy="28" r="14" fill="var(--sun)" opacity=".5"/>' +
+      '<path d="M150 38c0-6 5-10 11-9 2-5 9-6 12-2 5-1 9 3 8 8 4 1 5 7 1 9h-33c-4-1-4-5 1-6z" fill="#fff" opacity=".4"/>' +
+      '<rect x="0" y="146" width="200" height="24" fill="url(#gsoil)"/>' +
+      '<path d="M0 148c22-5 40 2 62-1 24-3 40 4 62 1 20-3 36 2 76-2v5H0z" fill="var(--soil-2)" opacity=".5"/>' +
+      '<ellipse cx="100" cy="150" rx="44" ry="5" fill="#000" opacity=".08"/>';
+  }
+
+  /* 단계 규칙: 이번 달에 목표를 지킨 날 수. 위 두 단계는 '놓친 날'로 정한다. */
+  function stageFor(kept, days, elapsed) {
+    var missed = elapsed - kept, ratio = kept / days;
+    if (elapsed >= days && missed === 0) return 6;
+    if (elapsed >= days && missed <= 2) return 5;
+    if (ratio >= 0.7) return 4;
+    if (ratio >= 0.5) return 3;
+    if (ratio >= 0.3) return 2;
+    if (kept >= 1) return 1;
+    return 0;
+  }
+  var LADDER = [
+    { i: 1, nm: '새싹', cond: '1일 이상' },
+    { i: 2, nm: '떡잎', cond: '9일 이상' },
+    { i: 3, nm: '어린나무', cond: '15일 이상' },
+    { i: 4, nm: '나무', cond: '21일 이상' },
+    { i: 5, nm: '어른나무', cond: '놓친 날 2일 이하' },
+    { i: 6, nm: '세계수', cond: '하루도 안 놓침' }
+  ];
+
+  function renderTree(el, idx, sway) {
+    el.innerHTML = '<title id="treeLab">' + STAGES[idx].name + '</title>' + scene() + '<g' + (sway ? ' id="sway"' : '') + '>' + STAGES[idx].art() + '</g>';
+  }
+  function render(kept) {
+    var elapsed = Math.max(kept, ELAPSED), idx = stageFor(kept, DAYS, elapsed);
+    var missed = elapsed - kept, left = DAYS - elapsed, best = stageFor(kept + left, DAYS, DAYS);
+    renderTree($('tree'), idx, true);
+    $('stageBadge').textContent = STAGES[idx].name;
+    $('stageSub').textContent = left > 0
+      ? (best > idx ? '남은 ' + left + '일을 다 지키면 ' + STAGES[best].name + '까지 가요' : '이대로 가면 ' + STAGES[idx].name + '로 이번 달을 마쳐요')
+      : STAGES[idx].note;
+    var h = '', d;
+    for (d = 0; d < DAYS; d++) h += '<span class="d ' + (d < kept ? 'k' : (d < elapsed ? 'm' : '')) + '"></span>';
+    $('strip').innerHTML = h;
+    $('sL').innerHTML = '지킨 날 <b>' + kept + '일</b>' + (missed > 0 ? ' · 놓친 날 <b>' + missed + '일</b>' : '');
+    $('sR').innerHTML = left > 0 ? '남은 날 <b>' + left + '일</b>' : '이번 달 끝';
+    h = '';
+    LADDER.forEach(function (s) {
+      h += '<div class="step' + (idx >= s.i ? ' done' : '') + (idx === s.i ? ' now' : '') + '"><span class="pin"></span><span class="nm">' + s.nm + '</span><span class="cond">' + s.cond + '</span></div>';
+    });
+    $('ladder').innerHTML = h;
+    $('keptVal').textContent = kept + '일';
+  }
+
+  var PAST = [['7월', 3], ['8월', 4], ['9월', 6]], fh = '';
+  PAST.forEach(function (p, i) { fh += '<div class="mini"><svg id="mini' + i + '" viewBox="0 0 200 168" role="img" aria-label="' + p[0] + ' ' + STAGES[p[1]].name + '"></svg><span>' + p[0] + ' <b>' + STAGES[p[1]].name + '</b></span></div>'; });
+  $('forest').innerHTML = fh;
+  PAST.forEach(function (p, i) { renderTree($('mini' + i), p[1], false); });
+  $('forestCount').textContent = '나무 ' + PAST.length + '그루';
+
+  $('kept').addEventListener('input', function (e) { render(+e.target.value); });
+  var wd = ['일', '월', '화', '수', '목', '금', '토'];
+  var now = new Date();
+  $('hello').textContent = (now.getMonth() + 1) + '월 ' + now.getDate() + '일 ' + wd[now.getDay()] + '요일';
+  render(22);
+})();
+</script>

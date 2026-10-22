@@ -6,7 +6,12 @@ import {
   buildIntervention,
   convertNativeBatch,
   finalizeSession,
+  getMonthProgress,
+  goalMinutesOn,
+  GOAL_SINCE_START,
   hourlyUsage,
+  nextGoalLog,
+  pastMonthProgress,
   insightLine,
   lockStreak,
   isBlocked,
@@ -78,6 +83,16 @@ describe("settings", () => {
     assert.equal(levelForUsage(14 * 60, settings), 1);
     assert.equal(levelForUsage(15 * 60, settings), 2);
     assert.equal(levelForUsage(30 * 60, settings), 3);
+  });
+
+  it("applies a new goal even when the full old settings are passed", () => {
+    const old = { ...defaultSettings(), level1Threshold: 25, level2Threshold: 50, level3Threshold: 50 };
+    const next = settingsFromGoal(45, { ...old, goalWeekAnswered: "2026-10-19" });
+    assert.equal(next.level3Threshold, 45);
+    assert.equal(next.level2Threshold, 45);
+    assert.equal(next.level1Threshold, 23);
+    assert.equal(next.goalWeekAnswered, "2026-10-19");
+    assert.equal(next.aiEnabled, old.aiEnabled);
   });
 
   it("reads old saved settings with defaults for the new fields", () => {
@@ -685,5 +700,150 @@ describe("v0.8.1", () => {
     assert.equal(lockStreak(data, "2026-09-26"), 3);
     assert.equal(lockStreak(data, "2026-09-27"), 3); // 오늘 아직 없으면 어제부터
     assert.equal(lockStreak(data, "2026-09-23"), 1);
+  });
+});
+
+describe("month of the tree", () => {
+  // 2026년 10월 = 31일, 11월 = 30일, 2026년 2월 = 28일
+  const watch = (id: string, month: number, day: number, minutes: number): UsageLog => ({
+    usageId: id,
+    date: `2026-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+    startTime: new Date(2026, month - 1, day, 21, 0).toISOString(),
+    endTime: new Date(2026, month - 1, day, 21, minutes).toISOString(),
+    duration: minutes * 60,
+    clipCount: 1,
+    target: "youtube",
+    source: "native",
+  });
+
+  it("counts kept, missed and future days; days without records are kept", () => {
+    const data = {
+      ...defaultData(), // 목표 20분
+      usageLogs: [watch("a", 10, 1, 10), watch("b", 10, 2, 25), watch("c", 10, 4, 20)],
+    };
+    const p = getMonthProgress(data, new Date(2026, 9, 5, 12));
+    assert.equal(p.monthDays, 31);
+    assert.equal(p.countedDays, 31);
+    assert.deepEqual(p.dayStates.slice(0, 6), ["kept", "missed", "kept", "kept", "kept", "future"]);
+    assert.equal(p.keptDays, 4); // 1일, 3일(기록 없음), 4일(딱 20분), 5일(오늘, 아직 0분)
+    assert.equal(p.missedDays, 1);
+    assert.equal(p.elapsedDays, 5);
+    assert.equal(p.hasRecords, true);
+  });
+
+  it("today turns missed once it goes over the goal", () => {
+    const data = { ...defaultData(), usageLogs: [watch("a", 10, 1, 5), watch("t", 10, 5, 21)] };
+    const p = getMonthProgress(data, new Date(2026, 9, 5, 23));
+    assert.equal(p.dayStates[4], "missed");
+  });
+
+  it("days before the first record are not counted", () => {
+    const data = { ...defaultData(), usageLogs: [watch("a", 10, 15, 5)] };
+    const p = getMonthProgress(data, new Date(2026, 9, 20));
+    assert.equal(p.beforeDays, 14);
+    assert.equal(p.countedDays, 17);
+    assert.equal(p.dayStates[13], "before");
+    assert.equal(p.dayStates[14], "kept");
+    assert.equal(p.elapsedDays, 6);
+    // 기록이 전혀 없으면 오늘만 센다
+    const fresh = getMonthProgress(defaultData(), new Date(2026, 9, 20));
+    assert.equal(fresh.beforeDays, 19);
+    assert.equal(fresh.keptDays, 1);
+    assert.equal(fresh.hasRecords, false);
+  });
+
+  it("keeps month boundaries: a session over midnight counts on both dates", () => {
+    const late: UsageLog = {
+      ...watch("n", 10, 31, 0),
+      startTime: new Date(2026, 9, 31, 23, 50).toISOString(),
+      endTime: new Date(2026, 10, 1, 0, 30).toISOString(),
+      duration: 40 * 60,
+    };
+    const data = { ...defaultData(), usageLogs: [watch("a", 10, 1, 1), late] };
+    const oct = getMonthProgress(data, new Date(2026, 9, 31, 23, 59));
+    assert.equal(oct.dayStates[30], "kept"); // 10분
+    const nov = getMonthProgress(data, new Date(2026, 10, 1, 9));
+    assert.equal(nov.monthDays, 30);
+    assert.equal(nov.dayStates[0], "missed"); // 30분
+    assert.equal(nov.dayStates.length, 30);
+    const feb = getMonthProgress({ ...defaultData(), usageLogs: [watch("f", 2, 1, 1)] }, new Date(2026, 1, 28));
+    assert.equal(feb.monthDays, 28);
+    assert.equal(feb.keptDays, 28);
+  });
+
+  it("past months: last three, judged at their last day", () => {
+    const data = { ...defaultData(), usageLogs: [watch("j", 7, 10, 5), watch("s", 9, 3, 50)] };
+    const past = pastMonthProgress(data, new Date(2026, 9, 21));
+    assert.deepEqual(past.map((p) => p.month), [7, 8, 9]);
+    assert.equal(past[0].beforeDays, 9);
+    assert.equal(past[1].hasRecords, false); // 8월은 기록 없음 → 화면에서 씨앗
+    assert.equal(past[2].elapsedDays, 30);
+    assert.equal(past[2].missedDays, 1);
+  });
+});
+
+describe("goal by date", () => {
+  const at = (day: number, hour = 12) => new Date(2026, 9, day, hour);
+  const seen = (day: number, minutes: number): UsageLog => ({
+    usageId: `u${day}-${minutes}`,
+    date: `2026-10-${String(day).padStart(2, "0")}`,
+    startTime: new Date(2026, 9, day, 9).toISOString(),
+    endTime: new Date(2026, 9, day, 9, minutes).toISOString(),
+    duration: minutes * 60,
+    clipCount: 1,
+    target: "youtube",
+    source: "native",
+  });
+  const withGoal = (data: AppData, goal: number, now: Date): AppData => {
+    const goalLog = nextGoalLog(data, goal, now) ?? data.goalLog;
+    return { ...data, goalLog, settings: settingsFromGoal(goal, data.settings) };
+  };
+
+  it("uses the current goal when nothing was changed", () => {
+    assert.equal(goalMinutesOn(defaultData(), "2026-10-01"), 20);
+    assert.equal(nextGoalLog(defaultData(), 20), null);
+  });
+
+  it("a lowered goal does not change earlier days", () => {
+    let data: AppData = { ...defaultData(), usageLogs: [seen(1, 47)] };
+    data = withGoal(data, 50, at(1, 8)); // 1일 아침에 50분으로
+    data = withGoal(data, 45, at(2)); // 2일에 45분으로
+    assert.equal(goalMinutesOn(data, "2026-10-01"), 20); // 1일 아침 전 목표 20 vs 50 → 20
+    assert.equal(goalMinutesOn(data, "2026-10-02"), 45);
+    assert.equal(goalMinutesOn(data, "2026-10-03"), 45);
+    assert.equal(data.goalLog[0].from, GOAL_SINCE_START);
+  });
+
+  it("raising the goal does not rescue today", () => {
+    let data: AppData = { ...defaultData(), usageLogs: [seen(5, 30)] };
+    data = withGoal(data, 60, at(5, 23));
+    assert.equal(goalMinutesOn(data, "2026-10-05"), 20);
+    assert.equal(goalMinutesOn(data, "2026-10-06"), 60);
+    assert.equal(getMonthProgress(data, at(5, 23)).dayStates[4], "missed");
+  });
+
+  it("lowering below what was already watched starts tomorrow", () => {
+    let data: AppData = { ...defaultData(), settings: settingsFromGoal(50, defaultData().settings) };
+    data = { ...data, usageLogs: [seen(7, 47)] };
+    data = withGoal(data, 45, at(7, 21)); // 47분 본 뒤
+    assert.equal(goalMinutesOn(data, "2026-10-07"), 50);
+    assert.equal(goalMinutesOn(data, "2026-10-08"), 45);
+    assert.equal(getMonthProgress(data, at(7, 22)).dayStates[6], "kept");
+    // 아직 적게 봤으면 오늘부터
+    let early: AppData = { ...defaultData(), settings: settingsFromGoal(50, defaultData().settings) };
+    early = { ...early, usageLogs: [seen(7, 8)] };
+    early = withGoal(early, 45, at(7, 11));
+    assert.equal(goalMinutesOn(early, "2026-10-07"), 45);
+  });
+
+  it("reads the goal log back and drops broken rows", () => {
+    const data = normalizeData({
+      usageLogs: [],
+      interventions: [],
+      goalLog: [{ from: "2026-10-01", minutes: 30 }, { from: "nope", minutes: 10 }, { from: "2026-10-02", minutes: 0 }],
+    });
+    assert.ok(data);
+    assert.deepEqual(data.goalLog, [{ from: "2026-10-01", minutes: 30 }]);
+    assert.deepEqual(normalizeData({ usageLogs: [], interventions: [] })?.goalLog, []);
   });
 });

@@ -2,6 +2,7 @@ import type {
   AppData,
   Band,
   DailyStats,
+  GoalChange,
   InterventionInput,
   InterventionLog,
   InterventionType,
@@ -864,4 +865,151 @@ export function settleReentry(
   });
   if (changed.length === 0) return { data, changed };
   return { data: { ...data, interventions }, changed };
+}
+
+// --- 이번 달의 나무: 날짜별 목표와 월별 집계 --------------------------------------
+
+/** 목표 기록의 시작 표시. 첫 변경 전 목표가 "처음부터" 쓰였다는 뜻이다. */
+export const GOAL_SINCE_START = "0000-01-01";
+
+/**
+ * 그날 판정에 쓰는 목표(분).
+ * = (그날 시작할 때 목표, 그날부터 적용된 목표들) 중 가장 작은 값.
+ * 목표를 올려도 그날은 원래 목표로 판정한다. 기록이 없으면 지금 목표.
+ */
+export function goalMinutesOn(data: AppData, date: string): number {
+  const log = data.goalLog;
+  if (log.length === 0) return Math.max(1, data.settings.level3Threshold);
+  let start: number | null = null;
+  let startFrom = "";
+  const sameDay: number[] = [];
+  for (const change of log) {
+    if (change.from < date) {
+      if (change.from >= startFrom) {
+        startFrom = change.from;
+        start = change.minutes;
+      }
+    } else if (change.from === date) {
+      sameDay.push(change.minutes);
+    }
+  }
+  if (start === null) {
+    // 모든 기록이 이 날 이후: 가장 이른 기록을 쓴다.
+    start = [...log].sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))[0].minutes;
+  }
+  return Math.max(1, Math.min(start, ...sameDay));
+}
+
+function addDays(dateKey: string, days: number): string {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return todayKey(new Date(y, (m || 1) - 1, (d || 1) + days));
+}
+
+/**
+ * 하루 목표를 newGoal로 바꿀 때의 새 목표 기록. 바뀌지 않으면 null.
+ * 낮췄는데 오늘 이미 새 목표보다 많이 봤으면 내일부터 적용한다 (오늘을 놓친 날로 바꾸지 않는다).
+ */
+export function nextGoalLog(data: AppData, newGoal: number, now = new Date()): GoalChange[] | null {
+  const oldGoal = data.settings.level3Threshold;
+  if (newGoal === oldGoal) return null;
+  const today = todayKey(now);
+  const log: GoalChange[] =
+    data.goalLog.length > 0 ? [...data.goalLog] : [{ from: GOAL_SINCE_START, minutes: oldGoal }];
+  const lowerThanWatched = newGoal < oldGoal && usageSecondsOn(data, today) > newGoal * 60;
+  log.push({ from: lowerThanWatched ? addDays(today, 1) : today, minutes: newGoal });
+  return log;
+}
+
+/** 기록이 처음 생긴 날짜. 기록이 없으면 null. */
+export function firstRecordDate(data: AppData): string | null {
+  let first: string | null = null;
+  const see = (date: string) => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date) && (first === null || date < first)) first = date;
+  };
+  data.usageLogs.forEach((log) => see(log.date));
+  data.interventions.forEach((log) => see(log.date));
+  data.lockAttempts.forEach((item) => see(item.date));
+  return first;
+}
+
+/** kept 지킨 날, missed 놓친 날, future 남은 날, before 설치 전(세지 않음). */
+export type DayState = "kept" | "missed" | "future" | "before";
+
+export type MonthProgress = {
+  year: number;
+  /** 1~12 */
+  month: number;
+  monthDays: number;
+  /** 설치 전 날짜를 뺀 날 수. 단계 계산에 쓴다. */
+  countedDays: number;
+  beforeDays: number;
+  keptDays: number;
+  missedDays: number;
+  /** 지난 날 수 (지킨 날 + 놓친 날). 오늘을 포함한다. */
+  elapsedDays: number;
+  dayStates: DayState[];
+  /** 그 달에 기록이 하나라도 있는지. */
+  hasRecords: boolean;
+};
+
+/**
+ * asOf가 속한 달의 진행 상황. asOf까지가 지난 날이고, 그 뒤는 남은 날이다.
+ * 지킨 날 = 그날 시청 시간 <= 그날 목표. 기록이 없는 날은 0분이라 지킨 날이다.
+ * 오늘은 아직 목표 안이면 지킨 날, 넘으면 놓친 날이다.
+ * 기록이 처음 생긴 날 전은 before(세지 않음)다.
+ */
+export function getMonthProgress(data: AppData, asOf: Date = new Date()): MonthProgress {
+  const year = asOf.getFullYear();
+  const monthIndex = asOf.getMonth();
+  const monthDays = new Date(year, monthIndex + 1, 0).getDate();
+  const asOfKey = todayKey(asOf);
+  const first = firstRecordDate(data) ?? asOfKey;
+  const start = first < asOfKey ? first : asOfKey;
+  const prefix = `${year}-${String(monthIndex + 1).padStart(2, "0")}-`;
+  const dayStates: DayState[] = [];
+  let kept = 0;
+  let missed = 0;
+  let before = 0;
+  for (let day = 1; day <= monthDays; day += 1) {
+    const key = prefix + String(day).padStart(2, "0");
+    if (key < start) {
+      dayStates.push("before");
+      before += 1;
+    } else if (key > asOfKey) {
+      dayStates.push("future");
+    } else if (usageSecondsOn(data, key) <= goalMinutesOn(data, key) * 60) {
+      dayStates.push("kept");
+      kept += 1;
+    } else {
+      dayStates.push("missed");
+      missed += 1;
+    }
+  }
+  const inMonth = (date: string) => date.startsWith(prefix);
+  const hasRecords =
+    data.usageLogs.some((log) => inMonth(log.date)) ||
+    data.interventions.some((log) => inMonth(log.date)) ||
+    data.lockAttempts.some((item) => inMonth(item.date));
+  return {
+    year,
+    month: monthIndex + 1,
+    monthDays,
+    countedDays: monthDays - before,
+    beforeDays: before,
+    keptDays: kept,
+    missedDays: missed,
+    elapsedDays: kept + missed,
+    dayStates,
+    hasRecords,
+  };
+}
+
+/** 지난 count개월(이번 달 제외, 오래된 순)의 진행 상황. 각 달의 마지막 날 기준. */
+export function pastMonthProgress(data: AppData, now = new Date(), count = 3): MonthProgress[] {
+  const months: MonthProgress[] = [];
+  for (let back = count; back >= 1; back -= 1) {
+    const lastDay = new Date(now.getFullYear(), now.getMonth() - back + 1, 0);
+    months.push(getMonthProgress(data, lastDay));
+  }
+  return months;
 }

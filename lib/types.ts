@@ -170,8 +170,20 @@ export type BlockState = {
   minutes: number;
 };
 
+/**
+ * 하루 목표(분)를 바꾼 기록. from 날짜부터 이 목표를 쓴다.
+ * 그날 판정 목표 = (그날 시작할 때 목표, 그날부터 적용된 목표들) 중 가장 작은 값.
+ * 목표를 낮췄는데 오늘 이미 그보다 많이 봤으면 from은 내일이다.
+ */
+export type GoalChange = {
+  from: string;
+  minutes: number;
+};
+
 export type AppData = {
   settings: Settings;
+  /** 비어 있으면 모든 날짜에 지금 목표(settings.level3Threshold)를 쓴다. */
+  goalLog: GoalChange[];
   usageLogs: UsageLog[];
   interventions: InterventionLog[];
   lockAttempts: LockAttempt[];
