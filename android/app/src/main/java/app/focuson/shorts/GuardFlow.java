@@ -634,10 +634,12 @@ final class GuardFlow {
             });
             chips.add(chip);
         }
-        String subtitle = reserve
-            ? GuardCopy.reserveHint(policy.ai.riskLabel)
-            : "오늘 남은 시간 " + GuardCopy.clock(policy.remainingSeconds(rec.usage))
+        // Subtitle: "남겨 둘까요?" > others' choices (up to 3 a day) > time left (also on the gauge above).
+        String subtitle = reserve ? GuardCopy.reserveHint(policy.ai.riskLabel) : compareSubtitle(rec, policy);
+        if (subtitle == null) {
+            subtitle = "오늘 남은 시간 " + GuardCopy.clock(policy.remainingSeconds(rec.usage))
                 + ". 정한 시간이 되면 멈춰 드려요.";
+        }
         overlay.step(extensionIndex > 0 ? "몇 분만 더 볼래요?" : "몇 분 볼래요?", subtitle, overlay.grid(chips, 3, 56));
     }
 
@@ -834,6 +836,22 @@ final class GuardFlow {
             host.recordOpen(rec.open.toJson());
         }
         host.record(rec.toJson());
+    }
+
+    private static final int COMPARE_PER_DAY = 3;
+
+    /** Others' choices at this hour, alternating "3분을 골랐어요" / "바로 나갔어요"; null when none or used up today. */
+    private String compareSubtitle(Rec rec, GuardPolicy policy) {
+        GuardPolicy.Compare compare = policy.compare;
+        if (compare == null) return null;
+        long now = System.currentTimeMillis();
+        if (GuardState.countToday(context, "compare", now) >= COMPARE_PER_DAY) return null;
+        int hour = hourNow();
+        boolean exit = GuardState.nextIndex(context, "compare_line") % 2 == 1;
+        String line = GuardCopy.compareLine(rec.kind, exit ? compare.exitOf10[hour] : compare.shortOf10[hour], exit, compare.demo);
+        if (line == null) line = GuardCopy.compareLine(rec.kind, exit ? compare.shortOf10[hour] : compare.exitOf10[hour], !exit, compare.demo);
+        if (line != null) GuardState.bumpToday(context, "compare", now);
+        return line;
     }
 
     /** Choices up to {@code max} minutes; the shortest one when none fits. */

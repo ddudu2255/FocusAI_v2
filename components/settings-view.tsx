@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { AiPanel } from "@/components/ai-panel";
 import { CardsPanel } from "@/components/cards-panel";
 import { GuardPanel } from "@/components/guard-panel";
+import { SyncPanel } from "@/components/sync-panel";
 import { useStore } from "@/components/store";
 import { APP_VERSION, RELEASES_URL } from "@/lib/app-info";
 import { isNativeAndroid } from "@/lib/guard";
@@ -54,6 +55,7 @@ export function SettingsView() {
   const [permissionMessage, setPermissionMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const versionTaps = useRef(0);
 
   if (!data) return null;
   const form = draft ?? toDraft(data.settings);
@@ -95,6 +97,11 @@ export function SettingsView() {
         banditV2: data.settings.banditV2,
         studyMode: data.settings.studyMode,
         goalWeekAnswered: data.settings.goalWeekAnswered,
+        usageSyncEnabled: data.settings.usageSyncEnabled,
+        usageSyncAsked: data.settings.usageSyncAsked,
+        onboardingDone: data.settings.onboardingDone,
+        cluster: data.settings.cluster,
+        demoMode: data.settings.demoMode,
       }),
     );
     setError(null);
@@ -215,6 +222,8 @@ export function SettingsView() {
       </form>
 
       <AiPanel />
+
+      <SyncPanel />
 
       <CardsPanel />
 
@@ -346,7 +355,19 @@ export function SettingsView() {
 
       <section className="space-y-1 text-sm leading-6 text-muted-foreground">
         <h2 className="text-base font-medium text-foreground">앱 정보</h2>
-        <p>ShortsAI {APP_VERSION ? `버전 ${APP_VERSION}` : ""}</p>
+        {/* 숨은 개발자 설정: 버전을 5번 누르면 시연 모드(비교 통계를 시연 데이터로) 켜기/끄기 */}
+        <p
+          onClick={() => {
+            versionTaps.current += 1;
+            if (versionTaps.current >= 5) {
+              versionTaps.current = 0;
+              saveSettings({ ...data.settings, demoMode: !data.settings.demoMode });
+            }
+          }}
+        >
+          ShortsAI {APP_VERSION ? `버전 ${APP_VERSION}` : ""}
+          {data.settings.demoMode ? " · 시연 모드" : ""}
+        </p>
         <p>
           기록 저장소: {storageKind === "sqlite" ? "기기 데이터베이스(SQLite)" : "브라우저 저장소"}
         </p>

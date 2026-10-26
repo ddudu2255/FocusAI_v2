@@ -13,6 +13,7 @@ import {
   readLocalStorage,
   readLockAttempt,
   readOpenLog,
+  readCompareSaved,
   readRiskModel,
   readSession,
   readGoalLog,
@@ -107,6 +108,9 @@ CREATE TABLE IF NOT EXISTS open_logs (
   duration_sec REAL
 );
 CREATE INDEX IF NOT EXISTS open_logs_created ON open_logs (created_at);
+CREATE TABLE IF NOT EXISTS sync_sent (
+  key TEXT PRIMARY KEY NOT NULL
+);
 CREATE TABLE IF NOT EXISTS app_events (
   id TEXT PRIMARY KEY NOT NULL,
   created_at TEXT NOT NULL,
@@ -444,6 +448,7 @@ export type Op =
   | { kind: "open"; row: OpenLog }
   | { kind: "event"; row: AppEvent }
   | { kind: "riskModel"; state: AppData["riskModel"] }
+  | { kind: "compare"; stats: AppData["compare"] }
   | { kind: "settings"; settings: Settings }
   | { kind: "goalLog"; log: AppData["goalLog"] }
   | { kind: "block"; block: AppData["block"] }
@@ -469,6 +474,8 @@ function statementsFor(op: Op): Statement[] {
       return [eventRow(op.row)];
     case "riskModel":
       return [settingRow("riskModel", op.state)];
+    case "compare":
+      return [settingRow("compare", op.stats)];
     case "settings":
       return [settingRow("settings", op.settings)];
     case "goalLog":
@@ -487,7 +494,8 @@ function statementsFor(op: Op): Statement[] {
         { statement: "DELETE FROM open_logs", values: [] },
         { statement: "DELETE FROM app_events", values: [] },
         { statement: "UPDATE cards SET shown = 0, correct = 0", values: [] },
-        { statement: "DELETE FROM settings WHERE key != 'migrated'", values: [] },
+        // 설치 번호(syncState)는 남긴다: 서버 기록 지우기를 이어서 할 수 있게.
+        { statement: "DELETE FROM settings WHERE key NOT IN ('migrated', 'syncState')", values: [] },
       ];
   }
 }
@@ -497,6 +505,57 @@ export async function applyOps(ops: Op[]): Promise<void> {
   if (set.length === 0) return;
   const db = await database();
   await db.executeSet(set as { statement: string; values: unknown[] }[], true);
+}
+
+// --- 서버로 보낸 기록 (lib/sync.ts) -------------------------------------------
+
+export type SyncState = {
+  installId: string;
+  /** 서버 기록 지우기를 아직 못 했으면 true (다음에 다시) */
+  pendingDelete: boolean;
+  /** 서버의 우리 표 버전 (sai_schema_version), 확인한 시각 */
+  schema: number;
+  schemaCheckedAt: number;
+};
+
+export async function readSyncState(): Promise<SyncState | null> {
+  const db = await database();
+  const result = await db.query("SELECT value FROM settings WHERE key = 'syncState'");
+  const raw = parse(((result.values ?? []) as Row[])[0]?.value);
+  if (!raw || typeof raw !== "object") return null;
+  const s = raw as Partial<SyncState>;
+  if (typeof s.installId !== "string") return null;
+  return {
+    installId: s.installId,
+    pendingDelete: s.pendingDelete === true,
+    schema: typeof s.schema === "number" ? s.schema : 0,
+    schemaCheckedAt: typeof s.schemaCheckedAt === "number" ? s.schemaCheckedAt : 0,
+  };
+}
+
+export async function writeSyncState(state: SyncState): Promise<void> {
+  const db = await database();
+  await db.executeSet([settingRow("syncState", state)] as { statement: string; values: unknown[] }[], true);
+}
+
+export async function readSyncSent(): Promise<Set<string>> {
+  const db = await database();
+  const result = await db.query("SELECT key FROM sync_sent");
+  return new Set(((result.values ?? []) as Row[]).map((row) => String(row.key)));
+}
+
+export async function markSynced(keys: string[]): Promise<void> {
+  if (keys.length === 0) return;
+  const db = await database();
+  await db.executeSet(
+    keys.map((key) => ({ statement: "INSERT OR IGNORE INTO sync_sent (key) VALUES (?)", values: [key] })),
+    true,
+  );
+}
+
+export async function clearSynced(): Promise<void> {
+  const db = await database();
+  await db.execute("DELETE FROM sync_sent;");
 }
 
 /** 모든 기록을 읽는다. 형식이 틀린 줄은 건너뛴다. */
@@ -528,6 +587,7 @@ export async function loadAll(): Promise<AppData> {
     openLogs: keep(opens.values, fromOpenRow),
     appEvents: keep(events.values, fromEventRow),
     riskModel: readRiskModel(meta.get("riskModel")),
+    compare: meta.get("compare") ? readCompareSaved(meta.get("compare")) : null,
     activeSession: readSession(meta.get("activeSession")),
     block: readBlock(meta.get("block")),
     lastNotifiedDate:

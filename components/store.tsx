@@ -33,7 +33,10 @@ import {
   type NotifyPermission,
 } from "@/lib/notify";
 import { backend, loadWithFallback, type Op } from "@/lib/persist";
+import type { CompareStats } from "@/lib/compare";
+import { applyOnboarding, skipOnboarding, type Cluster } from "@/lib/onboarding";
 import { settleOpenLogs } from "@/lib/risk";
+import { requestServerDelete } from "@/lib/sync-runner";
 import { clearData, defaultData } from "@/lib/storage";
 import type {
   AppData,
@@ -81,6 +84,12 @@ type StoreContextValue = {
   markReportSeen: () => void;
   /** 개입 스위치를 끄고 켠 기록 (측정만). */
   recordAppEvent: (kind: AppEvent["kind"]) => void;
+  /** 동의 창 답 (lib/sync.ts). */
+  answerUsageSync: (agree: boolean) => void;
+  /** 처음 질문 답 (lib/onboarding.ts). cluster가 null이면 건너뛰기. */
+  finishOnboarding: (cluster: Cluster | null, goal: number) => void;
+  /** 서버에서 받은 비교 통계를 저장한다. */
+  saveCompare: (stats: CompareStats) => void;
   addCards: (cards: StudyCard[]) => void;
   deleteCard: (id: string) => void;
   cancelDetach: () => void;
@@ -188,7 +197,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       next: fresh,
       ops: [{ kind: "clear" }, { kind: "settings", settings: fresh.settings }],
     })).catch(() => undefined);
-    if (isNativeAndroid()) await HanbakjaGuard.resetRecords().catch(() => undefined);
+    if (isNativeAndroid()) {
+      await HanbakjaGuard.resetRecords().catch(() => undefined);
+      // 서버에 보낸 기록도 지운다 (실패하면 연결될 때 다시).
+      await requestServerDelete().catch(() => undefined);
+    }
     setCorrupt(false);
   }, [mutate]);
 
@@ -473,6 +486,36 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [fire],
   );
 
+  const answerUsageSync = useCallback(
+    (agree: boolean) => {
+      fire((current) => {
+        const settings = { ...current.settings, usageSyncEnabled: agree, usageSyncAsked: true };
+        return { next: { ...current, settings }, ops: [{ kind: "settings", settings }] };
+      });
+    },
+    [fire],
+  );
+
+  const finishOnboarding = useCallback(
+    (cluster: Cluster | null, goal: number) => {
+      fire((current) => {
+        const next = cluster ? applyOnboarding(current, cluster, goal) : skipOnboarding(current);
+        const ops: Op[] = [{ kind: "settings", settings: next.settings }];
+        if (next.goalLog !== current.goalLog) ops.push({ kind: "goalLog", log: next.goalLog });
+        if (next.riskModel !== current.riskModel) ops.push({ kind: "riskModel", state: next.riskModel });
+        return { next, ops };
+      });
+    },
+    [fire],
+  );
+
+  const saveCompare = useCallback(
+    (stats: CompareStats) => {
+      fire((current) => ({ next: { ...current, compare: stats }, ops: [{ kind: "compare", stats }] }));
+    },
+    [fire],
+  );
+
   const markReportSeen = useCallback(() => {
     const today = todayKey();
     fire((current) => {
@@ -579,6 +622,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       mergeNative,
       markReportSeen,
       recordAppEvent,
+      answerUsageSync,
+      finishOnboarding,
+      saveCompare,
       addCards,
       deleteCard,
       cancelDetach,
@@ -610,6 +656,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       mergeNative,
       markReportSeen,
       recordAppEvent,
+      answerUsageSync,
+      finishOnboarding,
+      saveCompare,
       addCards,
       deleteCard,
       cancelDetach,

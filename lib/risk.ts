@@ -100,6 +100,7 @@ export function modelState(data: Pick<AppData, "riskModel">): RiskModelState {
   if (!s || s.version !== START_MODEL.version || s.weights.length !== START_MODEL.weights.length) {
     return startState();
   }
+  if (s.start && s.start.weights.length !== START_MODEL.weights.length) return { ...s, start: null };
   return s;
 }
 
@@ -150,13 +151,14 @@ export function learn(state: RiskModelState, raw: readonly number[], label: bool
   const x = standardize(raw);
   const p = riskScore(state, raw);
   const g = (label ? 1 : 0) - p;
-  const w0 = START_MODEL.weights;
+  const w0 = state.start?.weights ?? START_MODEL.weights;
   return {
     version: state.version,
     weights: state.weights.map((w, i) => w + LEARN_RATE * (g * x[i] - LEARN_PULL * (w - w0[i]))),
     bias: state.bias + LEARN_RATE * g,
     updates: state.updates + 1,
     updatedAt: at,
+    start: state.start ?? null,
   };
 }
 

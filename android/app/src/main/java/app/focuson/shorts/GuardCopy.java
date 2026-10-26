@@ -106,6 +106,20 @@ final class GuardCopy {
         return head + (reason == GuardRisk.Reason.PREVIOUS ? " 이번엔 3분씩 끊어서 볼게요" : " 3분씩 끊어서 볼게요");
     }
 
+    // --- Others' choices (approved 2026-10-26, docs/server/DESIGN.md 5장) ---
+
+    static final String DEMO_TAG = " (시연 데이터)";
+
+    /**
+     * Commitment step line from other users at this hour. {@code exit} picks the "바로 나갔어요" line.
+     * Null when that figure is missing (0).
+     */
+    static String compareLine(String target, int ofTen, boolean exit, boolean demo) {
+        if (ofTen < 1 || ofTen > 10) return null;
+        String head = "지금 이 시간에 " + playerName(target) + "를 연 사람 10명 중 " + ofTen + "명";
+        return head + (exit ? "은 바로 나갔어요." : "이 3분을 골랐어요.") + (demo ? DEMO_TAG : "");
+    }
+
     /** Commitment step before today's risky hour (A5). */
     static String reserveHint(String riskLabel) {
         return "보통 " + riskLabel + "쯤 많이 보셔서, 지금은 3분만 쓰고 남겨 둘까요?";

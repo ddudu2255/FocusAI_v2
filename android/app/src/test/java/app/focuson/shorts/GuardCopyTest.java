@@ -94,4 +94,13 @@ public class GuardCopyTest {
         assertTrue(GuardCopy.strong(0, f, "youtube").contains("잠시 쇼츠를 잠가"));
         assertTrue(GuardCopy.strong(0, f).contains("잠시 쇼츠를 잠가"));
     }
+
+    @Test
+    public void othersChoicesLines() {
+        assertEquals("지금 이 시간에 쇼츠를 연 사람 10명 중 6명이 3분을 골랐어요.",
+            GuardCopy.compareLine("youtube", 6, false, false));
+        assertEquals("지금 이 시간에 릴스를 연 사람 10명 중 1명은 바로 나갔어요. (시연 데이터)",
+            GuardCopy.compareLine("instagram", 1, true, true));
+        assertNull(GuardCopy.compareLine("youtube", 0, false, false));
+    }
 }

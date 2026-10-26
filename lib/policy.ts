@@ -1,5 +1,6 @@
 import { banditTables, HABITUATION, hourLabel, riskHours, tightenTable, type BetaTable } from "./ai.ts";
 import { FRAMINGS, usageStats } from "./logic.ts";
+import { sheetCompare } from "./compare.ts";
 import { bandsFor, keepingGoal, kept7, modelState } from "./risk.ts";
 import { START_MODEL } from "./risk-model.ts";
 import type { AppData, Settings, StudyCard } from "./types.ts";
@@ -30,6 +31,11 @@ export type Policy = {
    * 모든 카드가 쉬는 중이거나 카드가 없으면 서비스가 평소 활동으로 넘어간다.
    */
   studyMode: boolean;
+  /**
+   * 다른 사용자와 비교 (lib/compare.ts sheetCompare): 시간대(0~23시)별 "10명 중 N명"이 3분을 골랐다/바로 나갔다.
+   * 서비스가 "몇 분 볼래요?" 설명 자리에 하루 3번까지 쓴다. 받은 통계가 없으면 null.
+   */
+  compare: { demo: boolean; short: (number | null)[]; exit: (number | null)[] } | null;
   /** 문구에 쓰는 통계. 서비스가 지금 시각 기준으로 마무리 계산을 한다. */
   stats: {
     avg7Seconds: number;
@@ -133,6 +139,7 @@ export function buildPolicy(settings: Settings, data?: AppData, now = new Date()
       medium: ["breath", "alternative", "reflection", "card", "pause", "framing"],
     },
     studyMode: settings.studyMode,
+    compare: data ? sheetCompare(data.compare) : null,
     commitOptions: [3, 5, 10],
     extensionLadder: [10, 5, 3],
     overdraftMinutes: 3,

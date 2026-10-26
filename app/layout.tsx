@@ -7,6 +7,8 @@ import "@fontsource/noto-sans-kr/latin-500.css";
 import "@fontsource/noto-sans-kr/latin-700.css";
 import { AppShell } from "@/components/app-shell";
 import { GuardBridge } from "@/components/guard-bridge";
+import { Onboarding } from "@/components/onboarding";
+import { UsageSync } from "@/components/usage-sync";
 import { PwaRegister } from "@/components/pwa-register";
 import { StoreProvider } from "@/components/store";
 import "./globals.css";
@@ -53,6 +55,8 @@ export default function RootLayout({
         <StoreProvider>
           <PwaRegister />
           <GuardBridge />
+          <UsageSync />
+          <Onboarding />
           <AppShell>{children}</AppShell>
         </StoreProvider>
       </body>

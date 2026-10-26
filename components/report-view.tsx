@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/components/store";
 import { useNow } from "@/components/use-now";
+import { reportLine } from "@/lib/compare";
 import { isNativeAndroid } from "@/lib/guard";
 import {
   formatKoreanDate,
@@ -33,7 +34,8 @@ export function ReportView() {
     stats.usageSeconds === 0 &&
     stats.interventionCount === 0 &&
     stats.clipCount === 0;
-  const lines = reportLines(stats);
+  const others = reportLine(data.compare, data);
+  const lines = others ? [...reportLines(stats), others] : reportLines(stats);
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6">

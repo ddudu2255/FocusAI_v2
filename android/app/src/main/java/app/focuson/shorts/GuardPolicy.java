@@ -41,6 +41,22 @@ final class GuardPolicy {
     Ai ai = new Ai();
     /** 공부 모드: a due study card replaces the light/medium activity (normal methods otherwise). */
     boolean studyMode;
+    /** Others' choices by hour (lib/compare.ts sheetCompare); null without stats. */
+    Compare compare;
+
+    /** Out of 10 people who opened Shorts at that hour: how many chose 3 minutes / left right away. */
+    static final class Compare {
+        final boolean demo;
+        /** 24 entries, 0 = no figure for that hour */
+        final int[] shortOf10;
+        final int[] exitOf10;
+
+        Compare(boolean demo, int[] shortOf10, int[] exitOf10) {
+            this.demo = demo;
+            this.shortOf10 = shortOf10;
+            this.exitOf10 = exitOf10;
+        }
+    }
 
     /**
      * What the AI decides inside the rules: which method / line to show (Thompson
@@ -235,6 +251,7 @@ final class GuardPolicy {
             policy.stats = stats(json.optJSONObject("stats"));
             policy.ai = ai(json.optJSONObject("ai"));
             policy.studyMode = json.optBoolean("studyMode", false);
+            policy.compare = compare(json.optJSONObject("compare"));
             return policy;
         } catch (Exception e) {
             return base;
@@ -271,6 +288,25 @@ final class GuardPolicy {
         ai.model = ai.enabled ? model(json.optJSONObject("model")) : null;
         ai.tighten = table(json.optJSONObject("tighten"));
         return ai;
+    }
+
+    private static Compare compare(JSONObject json) {
+        if (json == null) return null;
+        int[] shortOf10 = tens(json.optJSONArray("short"));
+        int[] exitOf10 = tens(json.optJSONArray("exit"));
+        if (shortOf10 == null || exitOf10 == null) return null;
+        return new Compare(json.optBoolean("demo", false), shortOf10, exitOf10);
+    }
+
+    /** 24 numbers 1..10, or 0 where the web side sent null. */
+    private static int[] tens(JSONArray array) {
+        if (array == null || array.length() != 24) return null;
+        int[] out = new int[24];
+        for (int i = 0; i < 24; i++) {
+            int n = array.isNull(i) ? 0 : array.optInt(i, 0);
+            out[i] = n >= 1 && n <= 10 ? n : 0;
+        }
+        return out;
     }
 
     /** Null unless every array has the length the transform needs. */

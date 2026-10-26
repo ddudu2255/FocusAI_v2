@@ -48,6 +48,16 @@ export type Settings = {
   studyMode: boolean;
   /** 주간 목표 제안을 이미 답한 주 (월요일 날짜). */
   goalWeekAnswered: string;
+  /** 사용 기록을 서버로 보내는 데 동의했는지 (lib/sync.ts). 기본은 보내지 않음. */
+  usageSyncEnabled: boolean;
+  /** 동의 창을 이미 보여 줬는지 */
+  usageSyncAsked: boolean;
+  /** 처음 질문(lib/onboarding.ts)을 끝냈거나 건너뛰었는지 */
+  onboardingDone: boolean;
+  /** 처음 질문으로 고른 유형 id (lib/clusters.ts). 없으면 "". */
+  cluster: string;
+  /** 숨은 개발자 설정: 비교 통계를 시연 데이터로 보여 준다 ("(시연 데이터)" 표시). */
+  demoMode: boolean;
 };
 
 export type SessionTarget = "youtube" | "instagram" | "practice";
@@ -184,6 +194,8 @@ export type RiskModelState = {
   /** 지금까지 고친 횟수 */
   updates: number;
   updatedAt: string | null;
+  /** 시작 가중치 (처음 질문으로 고른 유형). 학습이 이쪽으로 당긴다. 없으면 risk-model.ts 시작 모델. */
+  start?: { weights: number[]; bias: number } | null;
 };
 
 /** 내 공부 카드. 직접 입력하거나 ChatGPT·Gemini 결과를 붙여넣어 만든다. */
@@ -247,6 +259,8 @@ export type AppData = {
   openLogs: OpenLog[];
   appEvents: AppEvent[];
   riskModel: RiskModelState | null;
+  /** 서버에서 받은 비교 통계 (lib/compare.ts). 하루 한 번 새로 받는다. */
+  compare: import("./compare.ts").CompareStats | null;
   activeSession: ActiveSession | null;
   block: BlockState;
   lastNotifiedDate: string | null;

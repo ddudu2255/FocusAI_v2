@@ -77,6 +77,11 @@ describe("settings", () => {
       banditV2: true,
       studyMode: false,
       goalWeekAnswered: "",
+      usageSyncEnabled: false,
+      usageSyncAsked: false,
+      onboardingDone: true,
+      cluster: "",
+      demoMode: false,
     });
     assert.equal(settings.level1Threshold, 15);
     assert.equal(settings.level3Threshold, 30);

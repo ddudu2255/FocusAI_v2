@@ -18,6 +18,7 @@ import {
   usageSecondsOn,
   type DayState,
 } from "@/lib/logic";
+import { homeLine } from "@/lib/compare";
 import { ladder, stageForMonth, stageHint, STAGES } from "@/lib/tree";
 import { cn } from "@/lib/utils";
 
@@ -78,6 +79,7 @@ export function HomeView() {
   const over = usage > goal * 60;
   const leftMinutes = Math.max(1, Math.ceil((goal * 60 - usage) / 60));
   const blocked = isBlocked(data.block, now);
+  const compareLine = homeLine(data.compare, data, date);
 
   const stage = stageForMonth(month.keptDays, month.countedDays, month.elapsedDays);
   const left = month.countedDays - month.elapsedDays;
@@ -207,6 +209,7 @@ export function HomeView() {
           <Tile value={`${kept}`} unit={`/${commitEnds.length}`} label="약속 지킴" />
           <Tile value={`${reopened}`} unit="회" label="다시 열기" />
         </div>
+        {compareLine ? <p className="mt-3 text-[13px] leading-5 text-muted-foreground">{compareLine}</p> : null}
       </section>
 
       <section className="rounded-3xl bg-card p-4 ring-1 ring-foreground/10">

@@ -1,3 +1,4 @@
+import { readCompare } from "./compare.ts";
 import { asTarget, finalizeSession, todayKey } from "./logic.ts";
 import type {
   ActiveSession,
@@ -36,6 +37,11 @@ export function defaultSettings(): Settings {
     banditV2: true,
     studyMode: false,
     goalWeekAnswered: "",
+    usageSyncEnabled: false,
+    usageSyncAsked: false,
+    onboardingDone: false,
+    cluster: "",
+    demoMode: false,
   };
 }
 
@@ -54,6 +60,11 @@ export function settingsFromGoal(
     | "banditV2"
     | "studyMode"
     | "goalWeekAnswered"
+    | "usageSyncEnabled"
+    | "usageSyncAsked"
+    | "onboardingDone"
+    | "cluster"
+    | "demoMode"
   >,
 ): Settings {
   // rest에 설정 전체가 와도 목표로 계산한 단계 기준이 이기도록 뒤에 둔다.
@@ -76,6 +87,7 @@ export function defaultData(): AppData {
     openLogs: [],
     appEvents: [],
     riskModel: null,
+    compare: null,
     activeSession: null,
     block: { until: null, minutes: 0 },
     lastNotifiedDate: null,
@@ -252,18 +264,31 @@ export function readAppEvent(value: unknown): AppEvent | null {
   };
 }
 
+/** 저장해 둔 비교 통계. 받은 시각을 유지한다. */
+export function readCompareSaved(value: unknown): AppData["compare"] {
+  const stats = readCompare(value);
+  if (!stats) return null;
+  const at = (value as { fetchedAt?: unknown }).fetchedAt;
+  return { ...stats, fetchedAt: typeof at === "string" ? at : new Date(0).toISOString() };
+}
+
 /** 폰에서 고친 가중치. 형식이 틀리면 null (시작 모델을 쓴다). */
 export function readRiskModel(value: unknown): RiskModelState | null {
   if (!value || typeof value !== "object") return null;
   const raw = value as Partial<RiskModelState>;
   if (typeof raw.version !== "string" || !Array.isArray(raw.weights) || !raw.weights.every(finite)) return null;
   if (!finite(raw.bias)) return null;
+  const start =
+    raw.start && Array.isArray(raw.start.weights) && raw.start.weights.every(finite) && finite(raw.start.bias)
+      ? { weights: raw.start.weights, bias: raw.start.bias }
+      : null;
   return {
     version: raw.version,
     weights: raw.weights,
     bias: raw.bias,
     updates: count(raw.updates),
     updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : null,
+    start,
   };
 }
 
@@ -332,6 +357,12 @@ export function readSettings(value: unknown): Settings {
     banditV2: raw.banditV2 !== false,
     studyMode: raw.studyMode === true,
     goalWeekAnswered: typeof raw.goalWeekAnswered === "string" ? raw.goalWeekAnswered : "",
+    usageSyncEnabled: raw.usageSyncEnabled === true,
+    usageSyncAsked: raw.usageSyncAsked === true,
+    // 이 칸이 생기기 전 버전에서 쓰던 사람은 처음 질문을 묻지 않는다 (이미 기록이 있다).
+    onboardingDone: raw.onboardingDone !== false,
+    cluster: typeof raw.cluster === "string" ? raw.cluster : "",
+    demoMode: raw.demoMode === true,
   };
   const goal =
     Number.isFinite(level3) && level3 >= 1 && level3 <= 360 ? Math.round(level3) : defaults.level3Threshold;
@@ -406,6 +437,7 @@ export function normalizeData(value: unknown): AppData | null {
     openLogs: readAll(raw.openLogs, readOpenLog),
     appEvents: readAll(raw.appEvents, readAppEvent),
     riskModel: readRiskModel(raw.riskModel),
+    compare: raw.compare ? readCompareSaved(raw.compare) : null,
     activeSession: readSession(raw.activeSession),
     block: readBlock(raw.block),
     lastNotifiedDate: typeof raw.lastNotifiedDate === "string" ? raw.lastNotifiedDate : null,
