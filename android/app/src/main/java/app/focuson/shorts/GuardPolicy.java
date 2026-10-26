@@ -5,11 +5,9 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TimeZone;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -46,8 +44,9 @@ final class GuardPolicy {
 
     /**
      * What the AI decides inside the rules: which method / line to show (Thompson
-     * sampling over learned posteriors), tighter numbers in risky hours, and when to ask
-     * for feedback. The band itself stays rule based.
+     * sampling over learned posteriors), how hard to hold back by the predicted risk of
+     * this open ({@link GuardRisk}), and when to ask for feedback. The band itself stays
+     * rule based.
      */
     static final class Ai {
         boolean enabled;
@@ -56,20 +55,20 @@ final class GuardPolicy {
         Map<String, Map<String, double[]>> methods = new HashMap<>();
         /** "slot" → framing kind → {alpha, beta} */
         Map<String, Map<String, double[]>> framings = new HashMap<>();
-        Set<Integer> riskHours = new HashSet<>();
+        /** Earliest usual heavy hour (lib/ai.ts riskHours); only for the "남겨 둘까요?" hint. */
         int firstRiskHour = -1;
         String riskLabel = "";
+        /** High risk (decided behaviour): longest commitment, wait before "3분만 더". */
         int riskCommitMax = 3;
-        int riskExtensionMax = 1;
         int riskOverdraftWaitSec = 10;
         int feedbackEvery = 5;
         /** Habituation (ai-2): 0 = off. See GuardBandit.freshness. */
         double habituationStrength = 0;
         double habituationRecoveryHours = 6;
-
-        boolean isRiskHour(int hour) {
-            return enabled && riskHours.contains(hour);
-        }
+        /** Risk model (lib/risk.ts); null when AI is off or the table has none. */
+        Model model;
+        /** "medium" | "high" → full / soft → {alpha, beta} */
+        Map<String, Map<String, double[]>> tighten = new HashMap<>();
 
         /**
          * Method posteriors for this band right now: "band:slot:weekday|weekend" (ai-2),
@@ -91,6 +90,35 @@ final class GuardPolicy {
         /** Before today's first risky hour: suggest keeping budget for later. */
         boolean beforeRisk(int hour) {
             return enabled && firstRiskHour >= 0 && hour < firstRiskHour && hour >= 5;
+        }
+    }
+
+    /** Logistic regression weights and scaling from lib/policy.ts ai.model. */
+    static final class Model {
+        final String version;
+        final double[] mean;
+        final double[] std;
+        final double[] weights;
+        final double bias;
+        /** low < bands[0] <= medium < bands[1] <= high */
+        final double[] bands;
+        final double cap;
+        /** Share of kept commitments in the last 7 days; a feature the web side computes. */
+        final double kept7;
+        /** Every one of the last 7 days within the goal: risk actions go one step softer. */
+        final boolean keepingGoal;
+
+        Model(String version, double[] mean, double[] std, double[] weights, double bias, double[] bands,
+              double cap, double kept7, boolean keepingGoal) {
+            this.version = version;
+            this.mean = mean;
+            this.std = std;
+            this.weights = weights;
+            this.bias = bias;
+            this.bands = bands;
+            this.cap = cap;
+            this.kept7 = kept7;
+            this.keepingGoal = keepingGoal;
         }
     }
 
@@ -225,7 +253,6 @@ final class GuardPolicy {
             for (int i = 0; i < hours.length(); i++) {
                 int hour = hours.optInt(i, -1);
                 if (hour < 0 || hour > 23) continue;
-                ai.riskHours.add(hour);
                 if (ai.firstRiskHour < 0 || hour < ai.firstRiskHour) ai.firstRiskHour = hour;
             }
         }
@@ -233,7 +260,6 @@ final class GuardPolicy {
         JSONObject risk = json.optJSONObject("risk");
         if (risk != null) {
             ai.riskCommitMax = Math.max(1, risk.optInt("commitMax", ai.riskCommitMax));
-            ai.riskExtensionMax = Math.max(0, risk.optInt("extensionMax", ai.riskExtensionMax));
             ai.riskOverdraftWaitSec = Math.max(0, risk.optInt("overdraftWaitSec", ai.riskOverdraftWaitSec));
         }
         ai.feedbackEvery = Math.max(1, json.optInt("feedbackEvery", ai.feedbackEvery));
@@ -242,7 +268,43 @@ final class GuardPolicy {
             ai.habituationStrength = Math.max(0, Math.min(1, habituation.optDouble("strength", 0)));
             ai.habituationRecoveryHours = Math.max(0.1, habituation.optDouble("recoveryHours", 6));
         }
+        ai.model = ai.enabled ? model(json.optJSONObject("model")) : null;
+        ai.tighten = table(json.optJSONObject("tighten"));
         return ai;
+    }
+
+    /** Null unless every array has the length the transform needs. */
+    private static Model model(JSONObject json) {
+        if (json == null) return null;
+        int n = GuardRisk.transform(new double[GuardRisk.RAW_COUNT], new double[15], 1).length;
+        double[] mean = doubles(json.optJSONArray("mean"));
+        double[] std = doubles(json.optJSONArray("std"));
+        double[] weights = doubles(json.optJSONArray("weights"));
+        double[] bands = doubles(json.optJSONArray("bands"));
+        if (mean == null || std == null || weights == null || bands == null) return null;
+        if (mean.length != n || std.length != n || weights.length != n || bands.length != 2) return null;
+        for (double v : std) if (v <= 0) return null;
+        return new Model(
+            json.optString("version", ""),
+            mean,
+            std,
+            weights,
+            json.optDouble("bias", 0),
+            bands,
+            json.optDouble("cap", 720),
+            json.optDouble("kept7", 0.75),
+            json.optBoolean("keepingGoal", false));
+    }
+
+    private static double[] doubles(JSONArray array) {
+        if (array == null) return null;
+        double[] out = new double[array.length()];
+        for (int i = 0; i < out.length; i++) {
+            double v = array.optDouble(i, Double.NaN);
+            if (Double.isNaN(v) || Double.isInfinite(v)) return null;
+            out[i] = v;
+        }
+        return out;
     }
 
     private static Map<String, Map<String, double[]>> table(JSONObject json) {

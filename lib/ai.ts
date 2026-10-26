@@ -263,6 +263,37 @@ export function banditTables(
   };
 }
 
+/**
+ * 예측 모델의 동작 고르기 (v0.11). 위험 보통·높음에서 정한 동작을 그대로 쓸지(full),
+ * 한 단계 약하게 쓸지(soft) 고른다. 칸은 위험도 하나("medium", "high").
+ * 보상은 방식 밴딧과 같은 세밀한 보상(개입 뒤 30분 동안 더 본 시간), 최근 가중치도 같다.
+ * 사전분포는 정한 동작 쪽으로 조금 기운다 (full Beta(2, 1), soft Beta(1, 1)).
+ */
+export const TIGHTEN_PRIOR = { full: [2, 1], soft: [1, 1] } as const;
+
+export function tightenTable(data: AppData, now = new Date()): BetaTable {
+  const nowMs = now.getTime();
+  const since = nowMs - BANDIT_WINDOW_DAYS * 86_400_000;
+  const sessions = data.usageLogs.filter((s) => new Date(s.endTime).getTime() >= since);
+  const counts: CountTable = {};
+  for (const log of data.interventions) {
+    if (!log.tighten || (log.riskBand !== "medium" && log.riskBand !== "high")) continue;
+    const atMs = new Date(log.timestamp).getTime();
+    if (atMs < since || atMs > nowMs || nowMs - atMs < REWARD_WINDOW_MINUTES * 60_000) continue;
+    const weight = Math.pow(0.5, (nowMs - atMs) / 86_400_000 / BANDIT_HALF_LIFE_DAYS);
+    addCount(counts, log.riskBand, log.tighten, gradedReward(log, sessions), weight);
+  }
+  const out: BetaTable = {};
+  for (const band of ["medium", "high"]) {
+    out[band] = {};
+    for (const arm of ["full", "soft"] as const) {
+      const [s, f] = counts[band]?.[arm] ?? [0, 0];
+      out[band][arm] = [TIGHTEN_PRIOR[arm][0] + s, TIGHTEN_PRIOR[arm][1] + f];
+    }
+  }
+  return out;
+}
+
 /** 지난 14일 중 기록이 있는 날 수 */
 export function recordedDays(data: AppData, now = new Date()): number {
   const days = new Set(data.usageLogs.map((log) => log.date));

@@ -357,7 +357,7 @@ describe("policy and feedback", () => {
   it("switches the policy between rules and AI", () => {
     const data = defaultData();
     const on = buildPolicy(data.settings, data);
-    assert.equal(on.version, "ai-2");
+    assert.equal(on.version, "ai-3");
     assert.equal(buildPolicy({ ...data.settings, banditV2: false }, data).version, "ai-1");
     assert.deepEqual(on.ai.habituation, { strength: 0.3, recoveryHours: 6 });
     assert.equal(buildPolicy({ ...data.settings, banditV2: false }, data).ai.habituation.strength, 0);

@@ -66,6 +66,8 @@ export type UsageLog = {
   clipCount: number;
   target: SessionTarget;
   source: "native" | "web";
+  /** 이 시청이 이어진 열기(OpenLog.id). 시트 없이 본 시청(개입 꺼짐, 연습 피드)은 없다. */
+  openId?: string | null;
 };
 
 /**
@@ -128,6 +130,60 @@ export type InterventionLog = {
   cardCorrect: boolean | null;
   extensionIndex: number;
   policyVersion: string | null;
+  /** 아래는 예측 모델 기록 (v0.11). 그 시청의 열기(OpenLog.id), 위험 점수와 위험도. */
+  openId: string | null;
+  riskScore: number | null;
+  riskBand: RiskBand | null;
+  /** 밴딧이 고른 동작: full = 정한 동작 그대로, soft = 한 단계 약하게. 위험 낮음이면 null. */
+  tighten: Tighten | null;
+  /** 정한 동작을 썼을 때 3분 이하를 골랐는지. 고르지 않았으면 null. */
+  tightenFollowed: boolean | null;
+};
+
+export type RiskBand = "low" | "medium" | "high";
+export type Tighten = "full" | "soft";
+
+/**
+ * 쇼츠를 열어 시트가 뜬 순간 한 줄 (예측 모델 기록). 그 열기에서 이어진 시청(연장, 10분 안에
+ * 이어 보기 포함)은 UsageLog.openId로 묶인다. 바로 나가면 시청 기록이 없다.
+ * features는 risk.ts RAW_FEATURES 순서의 날것 특징값이다.
+ */
+export type OpenLog = {
+  id: string;
+  createdAt: string;
+  date: string;
+  target: SessionTarget | null;
+  features: number[];
+  score: number;
+  band: RiskBand;
+  /** 밴딧 선택. 위험 높음 + full이면 3분 제한이 걸린 열기라 모델 학습에서 뺀다. */
+  tighten: Tighten | null;
+  /** 최근 7일 목표를 지키는 중이라 한 단계 약하게 개입했는지 (risk.ts keepingGoal). */
+  keeping: boolean;
+  modelVersion: string;
+  /** 정답: 이 열기에서 본 시간 합이 그날 목표의 절반 이상인지. 열기가 끝나기 전에는 null. */
+  label: boolean | null;
+  /** 이 열기에서 본 시간 합 (초). 정답을 정할 때 채운다. */
+  durationSec: number | null;
+};
+
+/** 개입 스위치를 끄고 켠 기록. 측정만 하고 밴딧 점수에는 쓰지 않는다. */
+export type AppEvent = {
+  id: string;
+  createdAt: string;
+  kind: "blocker_off" | "blocker_on";
+  /** 그때까지 오늘 본 초 */
+  todaySeconds: number;
+};
+
+/** 폰에서 고친 예측 모델 가중치. 없으면 시작 모델(risk-model.ts)을 쓴다. */
+export type RiskModelState = {
+  version: string;
+  weights: number[];
+  bias: number;
+  /** 지금까지 고친 횟수 */
+  updates: number;
+  updatedAt: string | null;
 };
 
 /** 내 공부 카드. 직접 입력하거나 ChatGPT·Gemini 결과를 붙여넣어 만든다. */
@@ -188,6 +244,9 @@ export type AppData = {
   interventions: InterventionLog[];
   lockAttempts: LockAttempt[];
   cards: StudyCard[];
+  openLogs: OpenLog[];
+  appEvents: AppEvent[];
+  riskModel: RiskModelState | null;
   activeSession: ActiveSession | null;
   block: BlockState;
   lastNotifiedDate: string | null;
@@ -242,6 +301,11 @@ export type InterventionInput = Omit<
   | "cardCorrect"
   | "extensionIndex"
   | "policyVersion"
+  | "openId"
+  | "riskScore"
+  | "riskBand"
+  | "tighten"
+  | "tightenFollowed"
 > & { target?: SessionTarget | null };
 
 /** 접근성 서비스가 쌓아 둔 기록. GuardPlugin.sync()가 넘겨준다. 시각은 epoch ms. */
@@ -251,6 +315,7 @@ export type NativeSession = {
   startedAt: number;
   endedAt: number;
   durationSec: number;
+  openId?: string | null;
 };
 
 export type NativeIntervention = {
@@ -280,6 +345,23 @@ export type NativeIntervention = {
   /** stage "feedback": answer to "도움이 됐나요?" for the row refId */
   refId?: string;
   feedback?: string;
+  openId?: string | null;
+  riskScore?: number | null;
+  riskBand?: string | null;
+  tighten?: string | null;
+};
+
+/** 서비스가 쇼츠를 열어 시트가 뜬 순간 남긴 줄. */
+export type NativeOpenLog = {
+  id: string;
+  createdAt: number;
+  target: string;
+  features: number[];
+  score: number;
+  band: string;
+  tighten?: string | null;
+  keeping?: boolean;
+  modelVersion: string;
 };
 
 export type NativeLockAttempt = {
@@ -293,4 +375,6 @@ export type NativeBatch = {
   sessions: NativeSession[];
   interventions: NativeIntervention[];
   lockAttempts: NativeLockAttempt[];
+  /** 예측 모델 이전 서비스는 보내지 않는다. */
+  openLogs?: NativeOpenLog[];
 };

@@ -22,6 +22,7 @@ import {
   settleReentry,
   statsForDate,
   todayKey,
+  usageSecondsOn,
   withClip,
 } from "@/lib/logic";
 import {
@@ -32,9 +33,11 @@ import {
   type NotifyPermission,
 } from "@/lib/notify";
 import { backend, loadWithFallback, type Op } from "@/lib/persist";
+import { settleOpenLogs } from "@/lib/risk";
 import { clearData, defaultData } from "@/lib/storage";
 import type {
   AppData,
+  AppEvent,
   InterventionInput,
   Level,
   NativeBatch,
@@ -70,9 +73,14 @@ type StoreContextValue = {
   beginBlock: (minutes: number) => void;
   /** 서비스 쪽 차단이 더 길면 화면에도 반영한다. */
   adoptBlock: (untilMs: number, minutes: number) => void;
-  /** 서비스 기록을 저장하고, 저장한(또는 이미 있던) id를 돌려준다. 그 뒤에 ack 한다. */
-  mergeNative: (batch: NativeBatch) => Promise<string[]>;
+  /**
+   * 서비스 기록을 저장하고, 저장한(또는 이미 있던) id를 돌려준다. 그 뒤에 ack 한다.
+   * watching: 서비스가 지금 시청 중인지 (끝나지 않은 열기의 정답을 미룬다).
+   */
+  mergeNative: (batch: NativeBatch, watching?: boolean) => Promise<string[]>;
   markReportSeen: () => void;
+  /** 개입 스위치를 끄고 켠 기록 (측정만). */
+  recordAppEvent: (kind: AppEvent["kind"]) => void;
   addCards: (cards: StudyCard[]) => void;
   deleteCard: (id: string) => void;
   cancelDetach: () => void;
@@ -349,11 +357,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const mergeNative = useCallback(
-    async (batch: NativeBatch) => {
+    async (batch: NativeBatch, watching = false) => {
       const ids = [
         ...(batch.sessions ?? []).map((row) => row.id),
         ...(batch.interventions ?? []).map((row) => row.id),
         ...(batch.lockAttempts ?? []).map((row) => row.id),
+        ...(batch.openLogs ?? []).map((row) => row.id),
       ].filter(Boolean);
       await mutate((current) => {
         const added = convertNativeBatch(current, batch);
@@ -368,6 +377,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           usageLogs: [...current.usageLogs, ...added.usageLogs],
           interventions: withFeedback([...current.interventions, ...added.interventions]),
           lockAttempts: [...current.lockAttempts, ...added.lockAttempts],
+          openLogs: [...current.openLogs, ...added.openLogs],
         };
         // 시트에서 푼 카드의 본 횟수·정답 수를 올린다.
         const cardHits = new Map<string, { shown: number; correct: number }>();
@@ -395,11 +405,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           merged.cards = (merged.cards ?? current.cards).filter((card) => !reported.has(card.id));
         }
         const settled = settleReentry(merged);
+        // 시청 기록이 들어온 열기에 정답을 채우고 예측 모델 가중치를 고친다.
+        const opened = settleOpenLogs(settled.data, Date.now(), watching);
+        const labeled = new Set(opened.changed.map((row) => row.id));
         const ops: Op[] = [
           ...removedCards.map((card) => ({ kind: "deleteCard" as const, id: card.id })),
           ...touchedCards.filter((row) => !reported.has(row.id)).map((row) => ({ kind: "card" as const, row })),
           ...added.usageLogs.map((row) => ({ kind: "session" as const, row })),
           ...added.lockAttempts.map((row) => ({ kind: "lock" as const, row })),
+          ...added.openLogs
+            .filter((row) => !labeled.has(row.id))
+            .map((row) => ({ kind: "open" as const, row })),
+          ...opened.changed.map((row) => ({ kind: "open" as const, row })),
+          ...(opened.modelChanged ? [{ kind: "riskModel" as const, state: opened.data.riskModel }] : []),
           // 재진입 판정이 붙은 개입은 최신 내용으로 덮어쓴다.
           ...settled.data.interventions
             .filter(
@@ -411,7 +429,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             .map((row) => ({ kind: "intervention" as const, row })),
         ];
         if (ops.length === 0) return null;
-        return { next: settled.data, ops };
+        return { next: opened.data, ops };
       });
       return ids;
     },
@@ -435,6 +453,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         next: { ...current, cards: current.cards.filter((card) => card.id !== id) },
         ops: [{ kind: "deleteCard", id }],
       }));
+    },
+    [fire],
+  );
+
+  const recordAppEvent = useCallback(
+    (kind: AppEvent["kind"]) => {
+      fire((current) => {
+        const now = new Date();
+        const row: AppEvent = {
+          id: crypto.randomUUID(),
+          createdAt: now.toISOString(),
+          kind,
+          todaySeconds: usageSecondsOn(current, todayKey(now)),
+        };
+        return { next: { ...current, appEvents: [...current.appEvents, row] }, ops: [{ kind: "event", row }] };
+      });
     },
     [fire],
   );
@@ -544,6 +578,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       adoptBlock,
       mergeNative,
       markReportSeen,
+      recordAppEvent,
       addCards,
       deleteCard,
       cancelDetach,
@@ -574,6 +609,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       adoptBlock,
       mergeNative,
       markReportSeen,
+      recordAppEvent,
       addCards,
       deleteCard,
       cancelDetach,

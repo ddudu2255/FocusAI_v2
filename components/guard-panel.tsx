@@ -18,7 +18,7 @@ const OFF_LINES = [
 ];
 
 export function GuardPanel() {
-  const { data } = useStore();
+  const { data, recordAppEvent } = useStore();
   const [native, setNative] = useState(false);
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [blocker, setBlocker] = useState<boolean | null>(null);
@@ -34,9 +34,10 @@ export function GuardPanel() {
 
   function setSwitch(next: boolean) {
     setBlocker(next);
-    void HanbakjaGuard.setBlocker({ enabled: next }).catch(() => {
-      setBlocker(!next);
-    });
+    void HanbakjaGuard.setBlocker({ enabled: next }).then(
+      () => recordAppEvent(next ? "blocker_on" : "blocker_off"),
+      () => setBlocker(!next),
+    );
   }
 
   useEffect(() => {

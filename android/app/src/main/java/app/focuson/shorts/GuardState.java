@@ -31,6 +31,10 @@ public final class GuardState {
     private static final String KEY_SESSIONS = "pending_sessions";
     private static final String KEY_INTERVENTIONS = "pending_interventions";
     private static final String KEY_LOCKS = "pending_locks";
+    private static final String KEY_OPENS = "pending_opens";
+    /** End and length of the last watch (risk model features). */
+    private static final String KEY_LAST_CLOSE = "last_closed_at";
+    private static final String KEY_LAST_DURATION = "last_duration_sec";
     private static final String KEY_BLOCKED_UNTIL = "blocked_until";
     private static final String KEY_BLOCK_MINUTES = "block_minutes";
     private static final String KEY_PROMPT_TARGET = "prompt_target";
@@ -325,11 +329,13 @@ public final class GuardState {
         }
     }
 
-    public static void startSession(Context context, String target, long now) {
+    /** @param openId the open (risk model row) this watch belongs to, or null without a sheet */
+    public static void startSession(Context context, String target, long now, String openId) {
         synchronized (LOCK) {
             JSONObject active = new JSONObject();
             try {
-                active.put("target", target).put("startedAt", now).put("lastSeenAt", now);
+                active.put("target", target).put("startedAt", now).put("lastSeenAt", now)
+                    .put("openId", openId == null ? JSONObject.NULL : openId);
             } catch (JSONException ignored) {
                 return;
             }
@@ -376,7 +382,8 @@ public final class GuardState {
                         .put("target", active.optString("target"))
                         .put("startedAt", startedAt)
                         .put("endedAt", end)
-                        .put("durationSec", seconds);
+                        .put("durationSec", seconds)
+                        .put("openId", active.isNull("openId") ? JSONObject.NULL : active.optString("openId"));
                 } catch (JSONException ignored) {
                     editor.commit();
                     return 0;
@@ -392,9 +399,22 @@ public final class GuardState {
                     }
                 }
                 editor.putString(KEY_DAY_USAGE, pruneDays(days).toString());
+                editor.putLong(KEY_LAST_CLOSE, end).putFloat(KEY_LAST_DURATION, (float) seconds);
             }
             editor.commit();
             return seconds >= 1 ? seconds : 0;
+        }
+    }
+
+    public static long lastClosedAt(Context context) {
+        synchronized (LOCK) {
+            return prefs(context).getLong(KEY_LAST_CLOSE, 0L);
+        }
+    }
+
+    public static double lastDurationSec(Context context) {
+        synchronized (LOCK) {
+            return prefs(context).getFloat(KEY_LAST_DURATION, 0f);
         }
     }
 
@@ -404,6 +424,14 @@ public final class GuardState {
         synchronized (LOCK) {
             SharedPreferences prefs = prefs(context);
             prefs.edit().putString(KEY_INTERVENTIONS, append(prefs, KEY_INTERVENTIONS, row)).commit();
+        }
+    }
+
+    /** Risk model row for one open (lib/types.ts NativeOpenLog). */
+    public static void addOpen(Context context, JSONObject row) {
+        synchronized (LOCK) {
+            SharedPreferences prefs = prefs(context);
+            prefs.edit().putString(KEY_OPENS, append(prefs, KEY_OPENS, row)).commit();
         }
     }
 
@@ -431,7 +459,8 @@ public final class GuardState {
             try {
                 out.put("sessions", readArray(prefs, KEY_SESSIONS))
                     .put("interventions", readArray(prefs, KEY_INTERVENTIONS))
-                    .put("lockAttempts", readArray(prefs, KEY_LOCKS));
+                    .put("lockAttempts", readArray(prefs, KEY_LOCKS))
+                    .put("openLogs", readArray(prefs, KEY_OPENS));
             } catch (JSONException ignored) {
                 // An empty object is still a valid answer.
             }
@@ -448,6 +477,7 @@ public final class GuardState {
                 .putString(KEY_SESSIONS, without(prefs, KEY_SESSIONS, ids))
                 .putString(KEY_INTERVENTIONS, without(prefs, KEY_INTERVENTIONS, ids))
                 .putString(KEY_LOCKS, without(prefs, KEY_LOCKS, ids))
+                .putString(KEY_OPENS, without(prefs, KEY_OPENS, ids))
                 .commit();
         }
     }
@@ -560,6 +590,32 @@ public final class GuardState {
         }
     }
 
+    /** Today's stored pick for {@code name}, or null (a new day starts empty). */
+    public static String todayChoice(Context context, String name, long now) {
+        synchronized (LOCK) {
+            JSONObject counters = readObject(prefs(context), KEY_COUNTERS);
+            String today = GuardTime.dayKey(now, TimeZone.getDefault());
+            if (!today.equals(counters.optString("date"))) return null;
+            String value = counters.optString("pick_" + name, "");
+            return value.isEmpty() ? null : value;
+        }
+    }
+
+    public static void setTodayChoice(Context context, String name, String value, long now) {
+        synchronized (LOCK) {
+            SharedPreferences prefs = prefs(context);
+            String today = GuardTime.dayKey(now, TimeZone.getDefault());
+            JSONObject counters = readObject(prefs, KEY_COUNTERS);
+            if (!today.equals(counters.optString("date"))) counters = new JSONObject();
+            try {
+                counters.put("date", today).put("pick_" + name, value);
+            } catch (JSONException ignored) {
+                return;
+            }
+            prefs.edit().putString(KEY_COUNTERS, counters.toString()).commit();
+        }
+    }
+
     // --- Prompt handed to the web flow (Level 3, Instagram) --------------------
 
     public static void startPrompt(Context context, String target, int level, double usageSeconds) {
@@ -630,6 +686,9 @@ public final class GuardState {
                 .putString(KEY_SESSIONS, "")
                 .putString(KEY_INTERVENTIONS, "")
                 .putString(KEY_LOCKS, "")
+                .putString(KEY_OPENS, "")
+                .putLong(KEY_LAST_CLOSE, 0L)
+                .putFloat(KEY_LAST_DURATION, 0f)
                 .putLong(KEY_BLOCKED_UNTIL, 0L)
                 .putInt(KEY_BLOCK_MINUTES, 0)
                 .putString(KEY_LOCK_LOG, "")

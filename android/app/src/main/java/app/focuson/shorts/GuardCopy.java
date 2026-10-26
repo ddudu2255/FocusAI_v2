@@ -74,9 +74,36 @@ final class GuardCopy {
 
     // --- AI phase lines (approved 2026-10-06, docs/HANDOFF.md) ---
 
-    /** Sheet notice in a risky hour (A7). */
-    static String aiRiskNotice(String riskLabel) {
-        return "AI · " + riskLabel + "쯤은 평소 오래 보던 시간이라 조금 짧게 잡았어요";
+    // --- Risk model lines (R1·R2, approved 2026-10-26, docs/risk-model/README.md) ---
+
+    /**
+     * Sheet notice for the predicted risk of this open: why the choices are 3 minutes only
+     * (short) or why 3 minutes is suggested. Null for no action.
+     */
+    static String riskNotice(GuardRisk.Action action, GuardRisk.Reason reason) {
+        if (action == GuardRisk.Action.NONE) return null;
+        boolean shortOnly = action == GuardRisk.Action.SHORT;
+        String head;
+        switch (reason) {
+            case TODAY:
+                head = "AI · 오늘 이미 꽤 봐서 길어지기 쉬워요.";
+                break;
+            case REOPEN:
+                head = "AI · 방금 닫았다가 다시 열었어요.";
+                break;
+            case PREVIOUS:
+                head = "AI · 방금 길게 봤어요.";
+                break;
+            case TIME:
+                head = "AI · 평소 길게 보던 때예요.";
+                break;
+            default:
+                return shortOnly
+                    ? "AI · 지금은 길어지기 쉬운 때라 3분씩 끊어서 볼게요"
+                    : "AI · 지금은 길어지기 쉬워요. 짧게 3분은 어때요?";
+        }
+        if (!shortOnly) return head + " 짧게 3분은 어때요?";
+        return head + (reason == GuardRisk.Reason.PREVIOUS ? " 이번엔 3분씩 끊어서 볼게요" : " 3분씩 끊어서 볼게요");
     }
 
     /** Commitment step before today's risky hour (A5). */

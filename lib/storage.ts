@@ -2,12 +2,16 @@ import { asTarget, finalizeSession, todayKey } from "./logic.ts";
 import type {
   ActiveSession,
   AppData,
+  AppEvent,
   BlockState,
   GoalChange,
   InterventionLog,
   InterventionType,
   LockAttempt,
+  OpenLog,
   Outcome,
+  RiskBand,
+  RiskModelState,
   Settings,
   StudyCard,
   UsageLog,
@@ -69,6 +73,9 @@ export function defaultData(): AppData {
     interventions: [],
     lockAttempts: [],
     cards: [],
+    openLogs: [],
+    appEvents: [],
+    riskModel: null,
     activeSession: null,
     block: { until: null, minutes: 0 },
     lastNotifiedDate: null,
@@ -106,6 +113,11 @@ const TYPES: InterventionType[] = [
   "pip",
 ];
 
+const RISK_BANDS: RiskBand[] = ["low", "medium", "high"];
+const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+const riskBandOf = (value: unknown): RiskBand | null =>
+  RISK_BANDS.includes(value as RiskBand) ? (value as RiskBand) : null;
+
 const text = (value: unknown): string | null =>
   typeof value === "string" && value !== "" ? value : null;
 const count = (value: unknown): number =>
@@ -134,6 +146,7 @@ export function readUsageLog(value: unknown): UsageLog | null {
     clipCount: typeof log.clipCount === "number" ? log.clipCount : 1,
     target: asTarget(log.target) ?? "practice",
     source: log.source === "native" ? "native" : "web",
+    openId: text(log.openId),
   };
 }
 
@@ -194,6 +207,63 @@ export function readIntervention(value: unknown): InterventionLog | null {
     cardCorrect: typeof log.cardCorrect === "boolean" ? log.cardCorrect : null,
     extensionIndex: count(log.extensionIndex),
     policyVersion: text(log.policyVersion),
+    openId: text(log.openId),
+    riskScore: finite(log.riskScore) ? log.riskScore : null,
+    riskBand: riskBandOf(log.riskBand),
+    tighten: log.tighten === "full" || log.tighten === "soft" ? log.tighten : null,
+    tightenFollowed: typeof log.tightenFollowed === "boolean" ? log.tightenFollowed : null,
+  };
+}
+
+export function readOpenLog(value: unknown): OpenLog | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<OpenLog>;
+  if (typeof raw.id !== "string" || typeof raw.createdAt !== "string") return null;
+  const at = new Date(raw.createdAt);
+  const band = riskBandOf(raw.band);
+  if (Number.isNaN(at.getTime()) || !band || !finite(raw.score)) return null;
+  if (!Array.isArray(raw.features) || !raw.features.every(finite)) return null;
+  return {
+    id: raw.id,
+    createdAt: raw.createdAt,
+    date: typeof raw.date === "string" ? raw.date : todayKey(at),
+    target: asTarget(raw.target),
+    features: raw.features,
+    score: raw.score,
+    band,
+    tighten: raw.tighten === "full" || raw.tighten === "soft" ? raw.tighten : null,
+    keeping: raw.keeping === true,
+    modelVersion: typeof raw.modelVersion === "string" ? raw.modelVersion : "",
+    label: typeof raw.label === "boolean" ? raw.label : null,
+    durationSec: finite(raw.durationSec) ? raw.durationSec : null,
+  };
+}
+
+export function readAppEvent(value: unknown): AppEvent | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<AppEvent>;
+  if (typeof raw.id !== "string" || typeof raw.createdAt !== "string") return null;
+  if (raw.kind !== "blocker_off" && raw.kind !== "blocker_on") return null;
+  return {
+    id: raw.id,
+    createdAt: raw.createdAt,
+    kind: raw.kind,
+    todaySeconds: finite(raw.todaySeconds) ? Math.max(0, raw.todaySeconds) : 0,
+  };
+}
+
+/** 폰에서 고친 가중치. 형식이 틀리면 null (시작 모델을 쓴다). */
+export function readRiskModel(value: unknown): RiskModelState | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<RiskModelState>;
+  if (typeof raw.version !== "string" || !Array.isArray(raw.weights) || !raw.weights.every(finite)) return null;
+  if (!finite(raw.bias)) return null;
+  return {
+    version: raw.version,
+    weights: raw.weights,
+    bias: raw.bias,
+    updates: count(raw.updates),
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : null,
   };
 }
 
@@ -333,6 +403,9 @@ export function normalizeData(value: unknown): AppData | null {
     interventions: readAll(raw.interventions, readIntervention),
     lockAttempts: readAll(raw.lockAttempts, readLockAttempt),
     cards: readAll(raw.cards, readCard),
+    openLogs: readAll(raw.openLogs, readOpenLog),
+    appEvents: readAll(raw.appEvents, readAppEvent),
+    riskModel: readRiskModel(raw.riskModel),
     activeSession: readSession(raw.activeSession),
     block: readBlock(raw.block),
     lastNotifiedDate: typeof raw.lastNotifiedDate === "string" ? raw.lastNotifiedDate : null,

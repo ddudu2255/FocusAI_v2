@@ -11,6 +11,7 @@ import {
   riskHours,
   type TimeSlot,
 } from "@/lib/ai";
+import { modelState } from "@/lib/risk";
 
 const SLOT_LABEL: Record<TimeSlot, string> = {
   morning: "아침",
@@ -60,6 +61,8 @@ export function AiPanel() {
   const tables = settings.aiEnabled ? banditTables(data) : null;
   const best = tables ? bestBySlot(tables.ownMethods) : new Map();
   const feedbackCount = data.interventions.filter((log) => log.feedback !== null).length;
+  // 예측 모델이 폰에서 배운 횟수 (정답이 정해진 열기 중 3분 제한이 없던 것)
+  const learned = modelState(data).updates;
 
   return (
     <section className="space-y-4 rounded-3xl bg-card p-5 ring-1 ring-foreground/10">
@@ -69,8 +72,9 @@ export function AiPanel() {
             AI 개인화
           </Label>
           <p className="text-sm leading-6 text-muted-foreground">
-            내 기록을 보고, 나에게 잘 맞는 개입 방식과 문구를 고르고, 평소 오래 보는 시간에는
-            조금 더 짧게 잡습니다. 계산은 모두 이 폰 안에서 하고, 기록은 밖으로 보내지 않습니다.
+            내 기록을 보고, 나에게 잘 맞는 개입 방식과 문구를 고르고, 길어지기 쉬운 순간에는 3분씩
+            끊어 보게 하고, 평소 오래 보는 시간 전에는 미리 알려 줍니다. 계산은 모두 이 폰 안에서
+            하고, 기록은 밖으로 보내지 않습니다.
             끄면 정해진 규칙대로 번갈아 보여 줍니다.
           </p>
         </div>
@@ -112,6 +116,11 @@ export function AiPanel() {
           <p>
             평소 오래 보는 시간:{" "}
             {risk ? risk.hours.map(hourLabel).join(", ") : "아직 찾지 못했어요"}
+          </p>
+          <p>
+            {learned > 0
+              ? `길어지기 쉬운 때: 쇼츠를 연 ${learned}번의 기록을 보고 배우는 중이에요`
+              : "길어지기 쉬운 때: 처음엔 기본값으로 시작해서, 쓰는 만큼 배워요"}
           </p>
           {(["morning", "day", "evening", "night"] as TimeSlot[]).map((slot) => {
             const top = best.get(slot);

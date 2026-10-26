@@ -6,11 +6,14 @@ import {
 import {
   defaultData,
   MIGRATED_KEY,
+  readAppEvent,
   readBlock,
   readCard,
   readIntervention,
   readLocalStorage,
   readLockAttempt,
+  readOpenLog,
+  readRiskModel,
   readSession,
   readGoalLog,
   readSettings,
@@ -19,8 +22,10 @@ import {
 } from "./storage.ts";
 import type {
   AppData,
+  AppEvent,
   InterventionLog,
   LockAttempt,
+  OpenLog,
   Settings,
   StudyCard,
   UsageLog,
@@ -28,7 +33,7 @@ import type {
 
 /**
  * 안드로이드 저장소. localStorage는 OS가 지울 수 있어 기록은 SQLite에 둔다.
- * 표: sessions, interventions, lock_attempts, cards, settings(키-값).
+ * 표: sessions, interventions, lock_attempts, cards, open_logs, app_events, settings(키-값).
  */
 const DB_NAME = "shortsai";
 const SCHEMA = `
@@ -87,6 +92,27 @@ CREATE TABLE IF NOT EXISTS cards (
   correct INTEGER NOT NULL DEFAULT 0,
   explanation TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS open_logs (
+  id TEXT PRIMARY KEY NOT NULL,
+  created_at TEXT NOT NULL,
+  date TEXT NOT NULL,
+  target TEXT,
+  features TEXT NOT NULL,
+  score REAL NOT NULL,
+  band TEXT NOT NULL,
+  tighten TEXT,
+  keeping INTEGER NOT NULL DEFAULT 0,
+  model_version TEXT NOT NULL,
+  label INTEGER,
+  duration_sec REAL
+);
+CREATE INDEX IF NOT EXISTS open_logs_created ON open_logs (created_at);
+CREATE TABLE IF NOT EXISTS app_events (
+  id TEXT PRIMARY KEY NOT NULL,
+  created_at TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  today_seconds REAL NOT NULL DEFAULT 0
+);
 `;
 
 /**
@@ -105,6 +131,12 @@ const INTERVENTION_COLUMNS: [string, string][] = [
   ["card_correct", "INTEGER"],
   ["extension_index", "INTEGER NOT NULL DEFAULT 0"],
   ["policy_version", "TEXT"],
+  // v0.11 예측 모델
+  ["open_id", "TEXT"],
+  ["risk_score", "REAL"],
+  ["risk_band", "TEXT"],
+  ["tighten", "TEXT"],
+  ["tighten_followed", "INTEGER"],
 ];
 
 type Statement = { statement: string; values: unknown[] };
@@ -126,6 +158,10 @@ async function connect(): Promise<SQLiteDBConnection> {
   for (const [name, type] of INTERVENTION_COLUMNS) {
     if (!have.has(name)) await db.execute(`ALTER TABLE interventions ADD COLUMN ${name} ${type};`);
   }
+  // v0.11: 시청이 이어진 열기
+  const sessionInfo = await db.query("PRAGMA table_info(sessions)");
+  const sessionCols = new Set(((sessionInfo.values ?? []) as { name?: string }[]).map((row) => row.name));
+  if (!sessionCols.has("open_id")) await db.execute("ALTER TABLE sessions ADD COLUMN open_id TEXT;");
   // v0.8.1: card explanation
   const cardInfo = await db.query("PRAGMA table_info(cards)");
   const cardCols = new Set(((cardInfo.values ?? []) as { name?: string }[]).map((row) => row.name));
@@ -152,7 +188,7 @@ const bit = (value: boolean) => (value ? 1 : 0);
 function sessionRow(log: UsageLog): Statement {
   return {
     statement:
-      "INSERT OR REPLACE INTO sessions (id, target, source, date, started_at, ended_at, duration_sec, clip_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT OR REPLACE INTO sessions (id, target, source, date, started_at, ended_at, duration_sec, clip_count, open_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     values: [
       log.usageId,
       log.target,
@@ -162,6 +198,7 @@ function sessionRow(log: UsageLog): Statement {
       log.endTime,
       log.duration,
       log.clipCount,
+      log.openId ?? null,
     ],
   };
 }
@@ -171,8 +208,9 @@ function interventionRow(log: InterventionLog): Statement {
     statement: `INSERT OR REPLACE INTO interventions (id, created_at, date, hour, weekday, target, level, reason, reason_note,
       intervention_type, alternative_action, alternative_completed, outcome, re_entered, blocked, block_minutes,
       usage_seconds, reentered_within_30min, feedback, band, stage, framing, verification, reflection, after_lock,
-      commit_minutes, card_id, card_correct, extension_index, policy_version)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      commit_minutes, card_id, card_correct, extension_index, policy_version,
+      open_id, risk_score, risk_band, tighten, tighten_followed)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     values: [
       log.interventionId,
       log.timestamp,
@@ -204,7 +242,40 @@ function interventionRow(log: InterventionLog): Statement {
       log.cardCorrect === null ? null : bit(log.cardCorrect),
       log.extensionIndex,
       log.policyVersion,
+      log.openId,
+      log.riskScore,
+      log.riskBand,
+      log.tighten,
+      log.tightenFollowed === null ? null : bit(log.tightenFollowed),
     ],
+  };
+}
+
+function openRow(row: OpenLog): Statement {
+  return {
+    statement: `INSERT OR REPLACE INTO open_logs (id, created_at, date, target, features, score, band, tighten,
+      keeping, model_version, label, duration_sec) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values: [
+      row.id,
+      row.createdAt,
+      row.date,
+      row.target,
+      JSON.stringify(row.features),
+      row.score,
+      row.band,
+      row.tighten,
+      bit(row.keeping),
+      row.modelVersion,
+      row.label === null ? null : bit(row.label),
+      row.durationSec,
+    ],
+  };
+}
+
+function eventRow(row: AppEvent): Statement {
+  return {
+    statement: "INSERT OR REPLACE INTO app_events (id, created_at, kind, today_seconds) VALUES (?, ?, ?, ?)",
+    values: [row.id, row.createdAt, row.kind, row.todaySeconds],
   };
 }
 
@@ -253,6 +324,7 @@ function fromSessionRow(row: Row): UsageLog | null {
     endTime: row.ended_at,
     duration: Number(row.duration_sec),
     clipCount: Number(row.clip_count),
+    openId: row.open_id ?? null,
   });
 }
 
@@ -290,6 +362,40 @@ function fromInterventionRow(row: Row): InterventionLog | null {
       row.card_correct === null || row.card_correct === undefined ? null : Number(row.card_correct) === 1,
     extensionIndex: Number(row.extension_index ?? 0),
     policyVersion: row.policy_version ?? null,
+    openId: row.open_id ?? null,
+    riskScore: row.risk_score === null || row.risk_score === undefined ? null : Number(row.risk_score),
+    riskBand: row.risk_band ?? null,
+    tighten: row.tighten ?? null,
+    tightenFollowed:
+      row.tighten_followed === null || row.tighten_followed === undefined
+        ? null
+        : Number(row.tighten_followed) === 1,
+  });
+}
+
+function fromOpenRow(row: Row): OpenLog | null {
+  return readOpenLog({
+    id: row.id,
+    createdAt: row.created_at,
+    date: row.date,
+    target: row.target,
+    features: parse(row.features),
+    score: Number(row.score),
+    band: row.band,
+    tighten: row.tighten ?? null,
+    keeping: Number(row.keeping) === 1,
+    modelVersion: row.model_version,
+    label: row.label === null || row.label === undefined ? null : Number(row.label) === 1,
+    durationSec: row.duration_sec === null || row.duration_sec === undefined ? null : Number(row.duration_sec),
+  });
+}
+
+function fromEventRow(row: Row): AppEvent | null {
+  return readAppEvent({
+    id: row.id,
+    createdAt: row.created_at,
+    kind: row.kind,
+    todaySeconds: Number(row.today_seconds),
   });
 }
 
@@ -335,6 +441,9 @@ export type Op =
   | { kind: "lock"; row: LockAttempt }
   | { kind: "card"; row: StudyCard }
   | { kind: "deleteCard"; id: string }
+  | { kind: "open"; row: OpenLog }
+  | { kind: "event"; row: AppEvent }
+  | { kind: "riskModel"; state: AppData["riskModel"] }
   | { kind: "settings"; settings: Settings }
   | { kind: "goalLog"; log: AppData["goalLog"] }
   | { kind: "block"; block: AppData["block"] }
@@ -354,6 +463,12 @@ function statementsFor(op: Op): Statement[] {
       return [cardRow(op.row)];
     case "deleteCard":
       return [{ statement: "DELETE FROM cards WHERE id = ?", values: [op.id] }];
+    case "open":
+      return [openRow(op.row)];
+    case "event":
+      return [eventRow(op.row)];
+    case "riskModel":
+      return [settingRow("riskModel", op.state)];
     case "settings":
       return [settingRow("settings", op.settings)];
     case "goalLog":
@@ -369,6 +484,8 @@ function statementsFor(op: Op): Statement[] {
         { statement: "DELETE FROM sessions", values: [] },
         { statement: "DELETE FROM interventions", values: [] },
         { statement: "DELETE FROM lock_attempts", values: [] },
+        { statement: "DELETE FROM open_logs", values: [] },
+        { statement: "DELETE FROM app_events", values: [] },
         { statement: "UPDATE cards SET shown = 0, correct = 0", values: [] },
         { statement: "DELETE FROM settings WHERE key != 'migrated'", values: [] },
       ];
@@ -385,11 +502,13 @@ export async function applyOps(ops: Op[]): Promise<void> {
 /** 모든 기록을 읽는다. 형식이 틀린 줄은 건너뛴다. */
 export async function loadAll(): Promise<AppData> {
   const db = await database();
-  const [sessions, interventions, locks, cards, settings] = await Promise.all([
+  const [sessions, interventions, locks, cards, opens, events, settings] = await Promise.all([
     db.query("SELECT * FROM sessions ORDER BY started_at"),
     db.query("SELECT * FROM interventions ORDER BY created_at"),
     db.query("SELECT * FROM lock_attempts ORDER BY created_at"),
     db.query("SELECT * FROM cards ORDER BY created_at"),
+    db.query("SELECT * FROM open_logs ORDER BY created_at"),
+    db.query("SELECT * FROM app_events ORDER BY created_at"),
     db.query("SELECT key, value FROM settings"),
   ]);
   const meta = new Map<string, unknown>();
@@ -406,6 +525,9 @@ export async function loadAll(): Promise<AppData> {
     interventions: keep(interventions.values, fromInterventionRow),
     lockAttempts: keep(locks.values, fromLockRow),
     cards: keep(cards.values, fromCardRow),
+    openLogs: keep(opens.values, fromOpenRow),
+    appEvents: keep(events.values, fromEventRow),
+    riskModel: readRiskModel(meta.get("riskModel")),
     activeSession: readSession(meta.get("activeSession")),
     block: readBlock(meta.get("block")),
     lastNotifiedDate:

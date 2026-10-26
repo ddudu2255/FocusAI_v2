@@ -1,0 +1,25 @@
+{
+  "seed": 20261026,
+  "users": 200,
+  "days": 84,
+  "features": [
+    "hour",
+    "weekend",
+    "today_ratio",
+    "today_opens",
+    "min_since_close",
+    "prev_duration_ratio",
+    "min_since_lock_end",
+    "yesterday_by_now_ratio",
+    "kept7",
+    "reason"
+  ],
+  "reasons": [
+    "심심해서",
+    "습관적으로",
+    "잠깐 보려고",
+    "스트레스 해소를 위해",
+    "특별한 이유 없이",
+    "기타"
+  ]
+}

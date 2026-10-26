@@ -81,7 +81,7 @@ export function GuardBridge() {
           cards: cardsForService(data),
         });
         if (stopped) return;
-        const ids = await mergeNative(batch);
+        const ids = await mergeNative(batch, status.watching);
         if (ids.length > 0) await HanbakjaGuard.ack({ ids });
       } catch {
         // 저장에 실패하면 ack 하지 않는다. 다음 주기에 다시 받는다.

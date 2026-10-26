@@ -1,5 +1,7 @@
-import { banditTables, HABITUATION, hourLabel, riskHours, type BetaTable } from "./ai.ts";
+import { banditTables, HABITUATION, hourLabel, riskHours, tightenTable, type BetaTable } from "./ai.ts";
 import { FRAMINGS, usageStats } from "./logic.ts";
+import { bandsFor, keepingGoal, kept7, modelState } from "./risk.ts";
+import { START_MODEL } from "./risk-model.ts";
 import type { AppData, Settings, StudyCard } from "./types.ts";
 
 /**
@@ -54,11 +56,34 @@ export type Policy = {
      * ai-1에서는 strength 0 (반영 안 함).
      */
     habituation: { strength: number; recoveryHours: number };
-    /** 평소 오래 보는 시간 (0~23시). 이 시간엔 세부 수치를 조인다. */
+    /**
+     * 평소 오래 보는 시간 (0~23시). 위험 시간 10분 전 알림과 "남겨 둘까요?" 추천에만 쓴다.
+     * 제한은 예측 모델(model)이 그 순간의 위험도로 정한다.
+     */
     riskHours: number[];
     /** 문구에 쓸 위험 시간 이름, 예: "밤 11시" */
     riskLabel: string;
-    risk: { commitMax: number; extensionMax: number; overdraftWaitSec: number };
+    /** 위험 높음에서 정한 동작: 약속 최대 3분(연장 횟수 제한 없음), "3분만 더" 대기 10초. */
+    risk: { commitMax: number; overdraftWaitSec: number };
+    /**
+     * 예측 모델 (lib/risk.ts). 서비스가 연 순간 날것 특징값으로 점수를 낸다.
+     * kept7은 웹이 계산해 넣는 특징값이다 (최근 7일 약속 지킨 비율).
+     */
+    model: {
+      version: string;
+      mean: number[];
+      std: number[];
+      weights: number[];
+      bias: number;
+      /** 낮음 < bands[0] ≤ 보통 < bands[1] ≤ 높음. 사람별 상대 기준 (risk.ts bandsFor). */
+      bands: number[];
+      cap: number;
+      kept7: number;
+      /** 최근 7일 목표를 다 지켰으면 true: 서비스가 위험도 개입을 한 단계 약하게 한다. */
+      keepingGoal: boolean;
+    } | null;
+    /** 위험 보통·높음에서 full(정한 동작) / soft(한 단계 약하게) Beta(α, β). 칸 이름 "medium", "high". */
+    tighten: BetaTable;
     /** 칭찬 화면에서 피드백을 묻는 간격 (N번에 1번) */
     feedbackEvery: number;
   };
@@ -68,6 +93,8 @@ export const RULE_POLICY_VERSION = "rule-2";
 export const AI_POLICY_VERSION = "ai-1";
 /** AI + 밴딧 학습 개선 (v0.9.1). 기록의 policyVersion으로 전후를 나눠 본다. */
 export const AI_SHARED_POLICY_VERSION = "ai-2";
+/** AI + 예측 모델 (v0.11). 밴딧 학습 개선(ai-2) 위에 위험도 예측을 더한다. */
+export const AI_RISK_POLICY_VERSION = "ai-3";
 
 export function buildPolicy(settings: Settings, data?: AppData, now = new Date()): Policy {
   const stats = data
@@ -77,11 +104,26 @@ export function buildPolicy(settings: Settings, data?: AppData, now = new Date()
   const aiOn = settings.aiEnabled && data !== undefined;
   const tables = aiOn ? banditTables(data, now) : { methods: {}, framings: {} };
   const risk = aiOn ? riskHours(data, now) : null;
+  const state = aiOn ? modelState(data) : null;
+  const model: Policy["ai"]["model"] =
+    aiOn && state
+      ? {
+          version: state.version,
+          mean: [...START_MODEL.mean],
+          std: [...START_MODEL.std],
+          weights: state.weights,
+          bias: state.bias,
+          bands: bandsFor(data, now),
+          cap: START_MODEL.cap,
+          kept7: kept7(data, now),
+          keepingGoal: keepingGoal(data, now),
+        }
+      : null;
   return {
     version: !aiOn
       ? RULE_POLICY_VERSION
       : settings.banditV2
-        ? AI_SHARED_POLICY_VERSION
+        ? AI_RISK_POLICY_VERSION
         : AI_POLICY_VERSION,
     goalMinutes: settings.level3Threshold,
     mediumAt: 0.5,
@@ -107,7 +149,9 @@ export function buildPolicy(settings: Settings, data?: AppData, now = new Date()
         aiOn && settings.banditV2 ? { ...HABITUATION } : { strength: 0, recoveryHours: HABITUATION.recoveryHours },
       riskHours: risk?.hours ?? [],
       riskLabel: risk ? hourLabel(risk.hours[0]) : "",
-      risk: { commitMax: 3, extensionMax: 1, overdraftWaitSec: 10 },
+      risk: { commitMax: 3, overdraftWaitSec: 10 },
+      model,
+      tighten: aiOn ? tightenTable(data, now) : {},
       feedbackEvery: 5,
     },
   };

@@ -26,6 +26,9 @@ import org.json.JSONObject;
  * Entry (light / medium): [after-lock question] → method → reason → commitment → play.
  * Commitment over: [band went up → that band's activity] → kept (leave) or extend.
  * Strong: day end / lock / "3분만 더" (through a nudge screen) / leave.
+ * The predicted risk of this open ({@link GuardRisk}) shapes the commitment chips and the
+ * "3분만 더" wait: high = 3-minute choices only (extensions stay) and a longer wait,
+ * medium = a "3분 · 추천" chip; the bandit may soften either by one step.
  * Locked ("쇼츠 쉬는 중" / "릴스 쉬는 중"): remaining time, rest so far, optionally one study card.
  */
 final class GuardFlow {
@@ -38,6 +41,9 @@ final class GuardFlow {
         void onBlock(String kind, long until, int minutes, boolean dayEnd);
 
         void record(JSONObject row);
+
+        /** Risk model row for the open; sent once, with its first sheet record. */
+        void recordOpen(JSONObject row);
 
         /** Numbers for the wording right now. */
         GuardCopy.Facts facts();
@@ -68,6 +74,8 @@ final class GuardFlow {
     private Rec open;
     /** Policy of the sheet on screen (null for the lock sheet). */
     private GuardPolicy openPolicy;
+    /** The open the sheets on screen belong to; null without a risk model. */
+    private GuardRisk.Open risk;
     private final Random random = new Random();
 
     GuardFlow(Context context, GuardOverlay overlay, Handler handler, Host host) {
@@ -78,6 +86,38 @@ final class GuardFlow {
     }
 
     // --- Entry points ----------------------------------------------------------
+
+    /** A new open (or none). Scores it now; the reason, once chosen, scores it again. */
+    void setOpen(GuardRisk.Open open, GuardPolicy policy) {
+        risk = open;
+        if (open != null) score(open, policy);
+    }
+
+    private void score(GuardRisk.Open open, GuardPolicy policy) {
+        GuardPolicy.Model model = policy.ai.model;
+        if (model == null) return;
+        open.score = GuardRisk.score(model, open.raw);
+        open.band = GuardRisk.band(open.score, model.bands);
+        open.keeping = model.keepingGoal;
+        open.tighten = GuardRisk.LOW.equals(open.band) ? null : tightenToday(open.band, policy);
+    }
+
+    /** Full or soft for this risk band, drawn once a day (the same answer all day). */
+    private String tightenToday(String band, GuardPolicy policy) {
+        long now = System.currentTimeMillis();
+        String name = "tighten_" + band;
+        String picked = GuardState.todayChoice(context, name, now);
+        if (picked == null) {
+            picked = GuardBandit.pick(
+                java.util.Arrays.asList(GuardRisk.FULL, GuardRisk.SOFT), policy.ai.tighten.get(band), random);
+            GuardState.setTodayChoice(context, name, picked, now);
+        }
+        return picked;
+    }
+
+    private GuardRisk.Action riskAction() {
+        return risk == null ? GuardRisk.Action.NONE : risk.action();
+    }
 
     void entry(String kind, double usage, GuardPolicy policy, boolean afterLock) {
         int band = policy.band(usage);
@@ -97,8 +137,7 @@ final class GuardFlow {
         }
         Rec rec = begin(kind, "commit_end", band, usage, policy);
         rec.extensionIndex = extensionIndex;
-        boolean canExtend = !policy.ai.strict
-            && !(policy.ai.isRiskHour(hourNow()) && extensionIndex + 1 > policy.ai.riskExtensionMax);
+        boolean canExtend = !policy.ai.strict;
         Runnable choices = () -> {
             View body = null;
             if (canExtend) {
@@ -551,6 +590,10 @@ final class GuardFlow {
             chip.setOnClickListener(v -> {
                 if (rec.reason != null) return;
                 rec.reason = reason;
+                if (risk != null && openPolicy != null) {
+                    risk.raw[GuardRisk.REASON] = GuardRisk.reasonIndex(reason);
+                    score(risk, openPolicy);
+                }
                 overlay.tint(chip, GuardOverlay.CARD_ON);
                 handler.postDelayed(next, 150);
             });
@@ -562,15 +605,15 @@ final class GuardFlow {
     /** "몇 분 볼래요?" within the remaining budget and the extension ladder. */
     private void commitment(Rec rec, GuardPolicy policy, int extensionIndex, String outcome) {
         List<Integer> choices = policy.commitChoices(policy.remainingSeconds(rec.usage), extensionIndex);
-        int hour = hourNow();
-        boolean risky = policy.ai.isRiskHour(hour);
-        if (risky && !choices.isEmpty()) {
-            // AI: in a risky hour the longest choice is shorter.
-            List<Integer> capped = new ArrayList<>();
-            for (int c : choices) if (c <= policy.ai.riskCommitMax) capped.add(c);
-            choices = capped.isEmpty() ? java.util.Collections.singletonList(choices.get(0)) : capped;
+        GuardRisk.Action action = riskAction();
+        if (action == GuardRisk.Action.SHORT) choices = capped(choices, policy.ai.riskCommitMax);
+        boolean reserve = action != GuardRisk.Action.SHORT && extensionIndex == 0
+            && policy.ai.beforeRisk(hourNow()) && !policy.ai.riskLabel.isEmpty();
+        boolean suggest = reserve || action == GuardRisk.Action.SUGGEST;
+        // R1·R2: why 3 minutes. The "남겨 둘까요?" hint already says why, and PIP keeps its note.
+        if (!reserve && !host.inPip() && risk != null && policy.ai.model != null) {
+            overlay.notice(GuardCopy.riskNotice(action, GuardRisk.topReason(policy.ai.model, risk.raw)));
         }
-        boolean reserve = !risky && extensionIndex == 0 && policy.ai.beforeRisk(hour) && !policy.ai.riskLabel.isEmpty();
         if (choices.isEmpty()) {
             rec.outcome = "budget_out";
             write(rec);
@@ -579,7 +622,7 @@ final class GuardFlow {
         }
         List<TextView> chips = new ArrayList<>();
         for (int minutes : choices) {
-            boolean suggested = reserve && minutes == choices.get(0);
+            boolean suggested = suggest && minutes == choices.get(0);
             TextView chip = overlay.chip(minutes + "분" + (suggested ? " · 추천" : ""));
             if (suggested) overlay.tint(chip, GuardOverlay.CARD_ON);
             chip.setOnClickListener(v -> {
@@ -651,7 +694,7 @@ final class GuardFlow {
         watch.setPadding(0, overlay.dp(14), 0, 0);
         watch.setClickable(true);
         box.addView(watch);
-        int waitSec = policy.ai.isRiskHour(hourNow()) ? policy.ai.riskOverdraftWaitSec : policy.overdraftWaitSec;
+        int waitSec = riskAction() == GuardRisk.Action.SHORT ? policy.ai.riskOverdraftWaitSec : policy.overdraftWaitSec;
         long enableAt = SystemClock.uptimeMillis() + waitSec * 1000L;
         String label = "그래도 " + policy.overdraftMinutes + "분 볼래요";
         watch.setOnClickListener(v -> {
@@ -775,13 +818,10 @@ final class GuardFlow {
         }
         overlay.open();
         openPolicy = policy;
-        String notice = host.inPip() ? GuardCopy.pipNote(kind) : null;
-        if (notice == null && policy != null && policy.ai.isRiskHour(hourNow()) && !policy.ai.riskLabel.isEmpty()) {
-            notice = GuardCopy.aiRiskNotice(policy.ai.riskLabel);
-        }
-        overlay.notice(notice);
+        overlay.notice(host.inPip() ? GuardCopy.pipNote(kind) : null);
         if (policy != null) overlay.gauge(policy.ratio(usage), policy.remainingSeconds(usage), band);
         Rec rec = new Rec(kind, stage, band, usage, policy == null ? "" : policy.version);
+        rec.open = policy == null ? null : risk;
         open = rec;
         return rec;
     }
@@ -789,7 +829,19 @@ final class GuardFlow {
     private void write(Rec rec) {
         if (rec.recorded) return;
         rec.recorded = true;
+        if (rec.open != null && !rec.open.queued) {
+            rec.open.queued = true;
+            host.recordOpen(rec.open.toJson());
+        }
         host.record(rec.toJson());
+    }
+
+    /** Choices up to {@code max} minutes; the shortest one when none fits. */
+    static List<Integer> capped(List<Integer> choices, int max) {
+        if (choices.isEmpty()) return choices;
+        List<Integer> out = new ArrayList<>();
+        for (int c : choices) if (c <= max) out.add(c);
+        return out.isEmpty() ? java.util.Collections.singletonList(choices.get(0)) : out;
     }
 
     /** One sheet's worth of data for the interventions table (AI training material). */
@@ -815,6 +867,8 @@ final class GuardFlow {
         int extensionIndex;
         String outcome;
         boolean recorded;
+        /** The open this sheet belongs to (risk model), or null. */
+        GuardRisk.Open open;
 
         Rec(String kind, String stage, int band, double usage, String policyVersion) {
             this.kind = kind;
@@ -849,7 +903,12 @@ final class GuardFlow {
                     .put("extensionIndex", extensionIndex)
                     .put("outcome", outcome == null ? "exit" : outcome)
                     .put("usageSeconds", usage)
-                    .put("policyVersion", policyVersion);
+                    .put("policyVersion", policyVersion)
+                    .put("openId", open == null ? JSONObject.NULL : open.id)
+                    .put("riskScore", open == null ? JSONObject.NULL : open.score)
+                    .put("riskBand", open == null ? JSONObject.NULL : open.band)
+                    // Keeping the goal overrides the pick, so it is not a bandit trial (lib/ai.ts tightenTable).
+                    .put("tighten", open == null || open.tighten == null || open.keeping ? JSONObject.NULL : open.tighten);
             } catch (JSONException ignored) {
                 // Fields are plain values; nothing to recover.
             }

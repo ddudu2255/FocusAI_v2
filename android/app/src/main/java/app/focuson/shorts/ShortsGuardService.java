@@ -76,6 +76,8 @@ public class ShortsGuardService extends AccessibilityService {
     private final LeaveGate leaveGate = new LeaveGate();
 
     private GuardFlow flow;
+    /** The open the current sheet and watching belong to (risk model); null without a sheet or model. */
+    private GuardRisk.Open currentOpen;
 
     /** Running watch-time commitment ("몇 분 볼래요?"). */
     private String commitKind;
@@ -481,6 +483,7 @@ public class ShortsGuardService extends AccessibilityService {
             return;
         }
         if (GuardState.consumeAllow(this, kind, now) || !GuardState.isBlockerEnabled(this)) {
+            currentOpen = null;
             startWatch(kind);
             return;
         }
@@ -496,11 +499,39 @@ public class ShortsGuardService extends AccessibilityService {
             return;
         }
         pausePlayback();
+        currentOpen = newOpen(kind, policy, usage, now);
+        flow.setOpen(currentOpen, policy);
+        if (currentOpen != null) {
+            log("위험도: " + currentOpen.band + " " + Math.round(currentOpen.score * 100) + "%"
+                + (currentOpen.tighten == null ? "" : " (" + currentOpen.tighten + ")"));
+        }
         if (band == GuardPolicy.BAND_STRONG) {
             flow.strong(kind, usage, policy, null, afterLock);
         } else {
             flow.entry(kind, usage, policy, afterLock);
         }
+    }
+
+    /** The numbers at this moment for the risk model, before the reason is asked. Null without a model. */
+    private GuardRisk.Open newOpen(String kind, GuardPolicy policy, double usage, long now) {
+        GuardPolicy.Model model = policy.ai.model;
+        if (model == null) return null;
+        Calendar cal = Calendar.getInstance();
+        cal.setTimeInMillis(now);
+        int opensToday = GuardState.countToday(this, "open", now);
+        GuardState.bumpToday(this, "open", now);
+        double[] raw = GuardRisk.features(
+            cal,
+            usage,
+            policy.goalMinutes * 60.0,
+            opensToday,
+            GuardState.lastClosedAt(this),
+            GuardState.lastDurationSec(this),
+            GuardState.blockedUntil(this),
+            policy.stats.yesterdayByNow(cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE)),
+            model.kept7,
+            -1);
+        return new GuardRisk.Open(kind, now, raw, model.version);
     }
 
     private final GuardFlow.Host flowHost = new GuardFlow.Host() {
@@ -537,6 +568,11 @@ public class ShortsGuardService extends AccessibilityService {
         @Override
         public void record(JSONObject row) {
             GuardState.addIntervention(ShortsGuardService.this, row);
+        }
+
+        @Override
+        public void recordOpen(JSONObject row) {
+            GuardState.addOpen(ShortsGuardService.this, row);
         }
 
         @Override
@@ -645,7 +681,7 @@ public class ShortsGuardService extends AccessibilityService {
     }
 
     private void startWatch(String kind) {
-        GuardState.startSession(this, kind, System.currentTimeMillis());
+        GuardState.startSession(this, kind, System.currentTimeMillis(), currentOpen == null ? null : currentOpen.id);
         log("시청 기록 시작: " + kind);
     }
 

@@ -9,6 +9,8 @@ import type {
   Level,
   LockAttempt,
   NativeBatch,
+  OpenLog,
+  RiskBand,
   SessionTarget,
   Settings,
   UsageLog,
@@ -692,6 +694,11 @@ export function buildIntervention(
     cardCorrect: null,
     extensionIndex: 0,
     policyVersion: null,
+    openId: null,
+    riskScore: null,
+    riskBand: null,
+    tighten: null,
+    tightenFollowed: null,
   };
 }
 
@@ -729,6 +736,10 @@ export function asTarget(value: unknown): SessionTarget | null {
   return value === "youtube" || value === "instagram" || value === "practice" ? value : null;
 }
 
+function asRiskBand(value: unknown): RiskBand | null {
+  return value === "low" || value === "medium" || value === "high" ? value : null;
+}
+
 function asLevel(value: number): Level {
   return value === 2 ? 2 : value === 3 ? 3 : 1;
 }
@@ -744,10 +755,12 @@ export function convertNativeBatch(
   feedback: { refId: string; feedback: "helpful" | "not" }[];
   /** 시트에서 "이상한 문제"로 신고된 카드 id */
   reports: string[];
+  openLogs: OpenLog[];
 } {
   const haveSession = new Set(data.usageLogs.map((log) => log.usageId));
   const haveIntervention = new Set(data.interventions.map((log) => log.interventionId));
   const haveLock = new Set(data.lockAttempts.map((item) => item.id));
+  const haveOpen = new Set(data.openLogs.map((item) => item.id));
 
   const usageLogs: UsageLog[] = (batch.sessions ?? [])
     .filter((row) => row.id && !haveSession.has(row.id) && row.endedAt > row.startedAt)
@@ -760,6 +773,7 @@ export function convertNativeBatch(
       clipCount: 1,
       target: asTarget(row.target) ?? "youtube",
       source: "native" as const,
+      openId: textOrNull(row.openId),
     }));
 
   const feedback = (batch.interventions ?? [])
@@ -785,6 +799,8 @@ export function convertNativeBatch(
       const watching = WATCH_OUTCOMES.includes(outcome);
       const blockMinutes = Math.max(0, Math.round(row.blockMinutes ?? 0));
       const type = SHEET_TYPES.find((t) => t === row.interventionType) ?? INTERVENTION_TYPE[level];
+      const commitMinutes = Math.max(0, Math.round(row.commitMinutes ?? 0));
+      const tighten = row.tighten === "full" || row.tighten === "soft" ? row.tighten : null;
       return {
         interventionId: row.id,
         timestamp: at.toISOString(),
@@ -811,11 +827,16 @@ export function convertNativeBatch(
         verification: textOrNull(row.verification),
         reflection: textOrNull(row.reflection),
         afterLock: textOrNull(row.afterLock),
-        commitMinutes: Math.max(0, Math.round(row.commitMinutes ?? 0)),
+        commitMinutes,
         cardId: textOrNull(row.cardId),
         cardCorrect: typeof row.cardCorrect === "boolean" ? row.cardCorrect : null,
         extensionIndex: Math.max(0, Math.round(row.extensionIndex ?? 0)),
         policyVersion: textOrNull(row.policyVersion),
+        openId: textOrNull(row.openId),
+        riskScore: typeof row.riskScore === "number" && Number.isFinite(row.riskScore) ? row.riskScore : null,
+        riskBand: asRiskBand(row.riskBand),
+        tighten,
+        tightenFollowed: tighten === "full" && commitMinutes > 0 ? commitMinutes <= 3 : null,
       };
     });
 
@@ -832,7 +853,30 @@ export function convertNativeBatch(
       };
     });
 
-  return { usageLogs, interventions, lockAttempts, feedback, reports };
+  const openLogs: OpenLog[] = (batch.openLogs ?? []).flatMap((row) => {
+    const band = asRiskBand(row.band);
+    if (!row.id || haveOpen.has(row.id) || !band || !Number.isFinite(row.score)) return [];
+    if (!Array.isArray(row.features) || !row.features.every((v) => Number.isFinite(v))) return [];
+    const at = new Date(row.createdAt);
+    return [
+      {
+        id: row.id,
+        createdAt: at.toISOString(),
+        date: todayKey(at),
+        target: asTarget(row.target),
+        features: row.features,
+        score: row.score,
+        band,
+        tighten: row.tighten === "full" || row.tighten === "soft" ? row.tighten : null,
+        keeping: row.keeping === true,
+        modelVersion: row.modelVersion || "",
+        label: null,
+        durationSec: null,
+      },
+    ];
+  });
+
+  return { usageLogs, interventions, lockAttempts, feedback, reports, openLogs };
 }
 
 /**
