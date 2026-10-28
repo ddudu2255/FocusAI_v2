@@ -32,6 +32,8 @@ function sqliteBackend(): Backend {
     async load() {
       const db = await import("./db");
       const migrated = await db.migrateFromLocalStorage();
+      // SQLite를 못 열던 동안 임시 저장소에 쌓인 기록이 있으면 합친다.
+      await db.mergeFallbackStorage();
       const loaded = await db.loadAll();
       // 연습 피드가 열린 채 앱이 닫혔으면 그 세션을 마감한다.
       const data = finalizeSession(loaded);

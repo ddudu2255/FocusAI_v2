@@ -21,6 +21,7 @@ import {
   readUsageLog,
   STORAGE_KEY,
 } from "./storage.ts";
+import { finalizeSession } from "./logic.ts";
 import type {
   AppData,
   AppEvent,
@@ -624,5 +625,46 @@ export async function migrateFromLocalStorage(): Promise<number> {
     if (raw) localStorage.setItem(MIGRATED_KEY, raw);
     localStorage.removeItem(STORAGE_KEY);
   }
+  return data ? data.usageLogs.length + data.interventions.length : 0;
+}
+
+/** 합친 뒤 임시 저장소 원본을 남겨 두는 키. */
+export const RECOVERED_KEY = "hanbakja.v1.recovered";
+
+/**
+ * SQLite를 못 열어 localStorage에 기록하던 동안의 기록을 SQLite로 합친다 (v0.12.1).
+ * 기록 줄은 번호가 이미 있으면 SQLite 쪽을 둔다. 설정·목표처럼 하나뿐인 값은
+ * 그동안 화면에 쓰던 임시 저장소 쪽(더 최근)을 쓴다. 원본은 다른 키로 남긴다.
+ */
+export async function mergeFallbackStorage(): Promise<number> {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return 0;
+  const db = await database();
+  const { data: stored } = readLocalStorage();
+  const ops: Op[] = [];
+  const data = stored ? finalizeSession(stored) : null;
+  if (data) {
+    ops.push({ kind: "settings", settings: data.settings });
+    ops.push({ kind: "goalLog", log: data.goalLog });
+    ops.push({ kind: "block", block: data.block });
+    ops.push({ kind: "lastNotifiedDate", date: data.lastNotifiedDate });
+    if (data.riskModel) ops.push({ kind: "riskModel", state: data.riskModel });
+  }
+  const keepExisting = (op: Op) =>
+    statementsFor(op).map((s) => ({ ...s, statement: s.statement.replace("INSERT OR REPLACE", "INSERT OR IGNORE") }));
+  const rows: Op[] = data
+    ? [
+        ...data.usageLogs.map((row) => ({ kind: "session" as const, row })),
+        ...data.interventions.map((row) => ({ kind: "intervention" as const, row })),
+        ...data.lockAttempts.map((row) => ({ kind: "lock" as const, row })),
+        ...data.cards.map((row) => ({ kind: "card" as const, row })),
+        ...data.openLogs.map((row) => ({ kind: "open" as const, row })),
+        ...data.appEvents.map((row) => ({ kind: "event" as const, row })),
+      ]
+    : [];
+  const set = [...ops.flatMap(statementsFor), ...rows.flatMap(keepExisting)];
+  if (set.length > 0) await db.executeSet(set as { statement: string; values: unknown[] }[], true);
+  localStorage.setItem(RECOVERED_KEY, raw);
+  localStorage.removeItem(STORAGE_KEY);
   return data ? data.usageLogs.length + data.interventions.length : 0;
 }
