@@ -50,6 +50,13 @@ public class GuardCopyTest {
     }
 
     @Test
+    public void sleepBasisNamesCalendarRemindersAsSchedules() {
+        assertEquals("8:10 알람 기준", GuardCopy.sleepBasis(8, 10, "com.sec.android.app.clockpackage"));
+        assertEquals("7:50 일정 기준", GuardCopy.sleepBasis(7, 50, "com.android.providers.calendar"));
+        assertEquals("7:05 알람 기준", GuardCopy.sleepBasis(7, 5, null));
+    }
+
+    @Test
     public void overdraftLinesEscalate() {
         GuardCopy.Facts f = facts(26, 20);
         assertEquals("오늘 1번째 3분이에요", GuardCopy.overdraftTitle(1, 3));

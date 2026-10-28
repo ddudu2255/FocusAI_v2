@@ -123,13 +123,23 @@ export function hourLabel(hour: number): string {
   return `밤 ${hour - 12}시`;
 }
 
+/**
+ * 화면에 보일 분. 목표를 넘은 날은 올림한다: 50.1분을 "50"으로 보이면서 넘은 날로 칠하지 않게.
+ */
+export function shownMinutes(seconds: number, goalMinutes: number): number {
+  return seconds > goalMinutes * 60 ? Math.ceil(seconds / 60) : Math.round(seconds / 60);
+}
+
 export type MethodResult = { type: string; total: number; stopped: number };
 
-/** 개입 방식별로 몇 번 나왔고 몇 번 멈췄는지. 다시 열기 차단 기록은 뺀다. */
+/** 개입 방법이 아니라 단계인 것. "잘 통한 방법" 순위에 넣지 않는다. */
+const NOT_METHODS = new Set(["commit_end", "strong", "locked", "pip"]);
+
+/** 개입 방식별로 몇 번 나왔고 몇 번 멈췄는지. 다시 열기 차단 기록과 단계(약속 끝·마무리·잠금)는 뺀다. */
 export function methodResults(logs: InterventionLog[]): MethodResult[] {
   const map = new Map<string, MethodResult>();
   for (const log of logs) {
-    if (log.outcome === "blocked-retry") continue;
+    if (log.outcome === "blocked-retry" || NOT_METHODS.has(log.interventionType)) continue;
     const row = map.get(log.interventionType) ?? { type: log.interventionType, total: 0, stopped: 0 };
     row.total += 1;
     if (stoppedAfter(log)) row.stopped += 1;

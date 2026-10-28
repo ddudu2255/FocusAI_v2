@@ -608,8 +608,8 @@ public class ShortsGuardService extends AccessibilityService {
                 wake = next.getTriggerTime();
                 Calendar at = Calendar.getInstance();
                 at.setTimeInMillis(wake);
-                f.sleepBasis = String.format(java.util.Locale.ROOT, "%d:%02d 알람 기준",
-                    at.get(Calendar.HOUR_OF_DAY), at.get(Calendar.MINUTE));
+                String owner = next.getShowIntent() == null ? null : next.getShowIntent().getCreatorPackage();
+                f.sleepBasis = GuardCopy.sleepBasis(at.get(Calendar.HOUR_OF_DAY), at.get(Calendar.MINUTE), owner);
             } else {
                 Calendar at = Calendar.getInstance();
                 at.setTimeInMillis(now);
@@ -690,7 +690,8 @@ public class ShortsGuardService extends AccessibilityService {
         GuardState.addLockAttempt(this, kind, now, until - now);
         log("잠금 중 진입: 남은 " + GuardCopy.countdown(until - now));
         pausePlayback();
-        flow.locked(kind, until);
+        GuardPolicy policy = GuardState.policy(this);
+        flow.locked(kind, until, GuardState.todaySeconds(this, now), policy);
     }
 
     /** BACK, then HOME if the player is still there 0.8 s later. The stay ends right away. */

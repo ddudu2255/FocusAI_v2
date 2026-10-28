@@ -24,6 +24,7 @@ import {
   METHOD_LABEL,
   methodResults,
   opensOn,
+  shownMinutes,
   riskyHour,
   usualByNow,
   usualDifferences,
@@ -113,7 +114,7 @@ export function ReportView() {
         <div className="mt-1 flex items-baseline justify-between gap-2">
           <p className="tabular-nums">
             <span className={cn("text-[44px] leading-none font-bold tracking-tight", over && "text-level-2")}>
-              {minutes(usage)}
+              {shownMinutes(usage, goal)}
             </span>
             <span className="ml-1 text-lg font-bold">분</span>
             <span className="ml-1.5 text-[15px] text-muted-foreground">/ 목표 {goal}분</span>

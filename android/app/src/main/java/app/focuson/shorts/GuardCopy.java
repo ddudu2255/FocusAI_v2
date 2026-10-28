@@ -148,6 +148,15 @@ final class GuardCopy {
         }
     }
 
+    /**
+     * Basis for the sleep line when the phone reports a next alarm. Android gives only the earliest
+     * one, and a calendar reminder can come before the clock alarm, so name it for what it is.
+     */
+    static String sleepBasis(int hour, int minute, String ownerPackage) {
+        boolean calendar = ownerPackage != null && ownerPackage.toLowerCase(java.util.Locale.ROOT).contains("calendar");
+        return String.format(java.util.Locale.ROOT, calendar ? "%d:%02d 일정 기준" : "%d:%02d 알람 기준", hour, minute);
+    }
+
     // --- S1. Time line (entry sheet) -------------------------------------------
 
     static String insight(String kind, Facts f) {

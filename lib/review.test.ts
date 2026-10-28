@@ -10,6 +10,7 @@ import {
   opensOn,
   peakHour,
   riskyHour,
+  shownMinutes,
   usualByNow,
   usualDifferences,
   weakMethod,
@@ -220,5 +221,24 @@ describe("review: report", () => {
     assert.deepEqual(longestWatch(data, key(28)), { startTime: local(28, 22), seconds: 25 * 60 });
     assert.equal(opensOn(data, key(28)), 3);
     assert.equal(longestWatch(data, key(20)), null);
+  });
+});
+
+describe("review: fixes from the phone test", () => {
+  it("rounds an over-goal day up so it never shows the goal itself", () => {
+    assert.equal(shownMinutes(50 * 60 + 6, 50), 51);
+    assert.equal(shownMinutes(49 * 60 + 40, 50), 50);
+    assert.equal(shownMinutes(30 * 60 + 20, 50), 30);
+  });
+
+  it("leaves stages out of the method ranking", () => {
+    const logs = [
+      intervention("a", 28, 9, "commit_end", "kept"),
+      intervention("b", 28, 10, "commit_end", "kept"),
+      intervention("c", 28, 11, "pause", "exit"),
+      intervention("d", 28, 12, "pause", "watch"),
+    ];
+    assert.deepEqual(methodResults(logs), [{ type: "pause", total: 2, stopped: 1 }]);
+    assert.equal(bestMethod(methodResults(logs))?.type, "pause");
   });
 });

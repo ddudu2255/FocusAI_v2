@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { useStore } from "@/components/store";
 import { useNow } from "@/components/use-now";
 import {
@@ -20,6 +20,7 @@ import {
   METHOD_LABEL,
   peakHour,
   RESULT_CHIP,
+  shownMinutes,
   weekSeries,
   weekSummary,
 } from "@/lib/review";
@@ -119,7 +120,7 @@ export function StatsView() {
                     setOpenId(null);
                   }}
                   aria-pressed={on}
-                  aria-label={`${longDate(day.date)} ${minutes(day.seconds)}분`}
+                  aria-label={`${longDate(day.date)} ${shownMinutes(day.seconds, day.goalMinutes)}분`}
                   className="flex h-full flex-col items-center justify-end gap-1 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <span
@@ -129,7 +130,7 @@ export function StatsView() {
                       on && "font-bold text-foreground",
                     )}
                   >
-                    {day.state === "before" ? "" : minutes(day.seconds)}
+                    {day.state === "before" ? "" : shownMinutes(day.seconds, day.goalMinutes)}
                   </span>
                   <span
                     className={cn(
@@ -168,8 +169,18 @@ export function StatsView() {
         <h2 className="text-lg font-bold">{longDate(active)}</h2>
         {empty ? null : (
           <p className="mt-0.5 text-[13.5px] text-muted-foreground tabular-nums">
-            {minutes(stats.usageSeconds)}분 사용 · 목표 {activeGoal}분 · 개입 {stats.interventionCount}회 · 스스로 멈춤{" "}
-            {stats.selfStopCount}번
+            {[
+              `${shownMinutes(stats.usageSeconds, activeGoal)}분 사용`,
+              `목표 ${activeGoal}분`,
+              `개입 ${stats.interventionCount}회`,
+              `스스로 멈춤 ${stats.selfStopCount}번`,
+            ].map((part, i) => (
+              // 항목 하나는 줄을 넘기지 않는다 ("16번"의 "번"만 내려가지 않게). 줄바꿈은 " · "에서.
+              <Fragment key={part}>
+                {i > 0 ? " · " : ""}
+                <span className="whitespace-nowrap">{part}</span>
+              </Fragment>
+            ))}
           </p>
         )}
       </div>

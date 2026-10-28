@@ -166,11 +166,11 @@ final class GuardFlow {
         else show.run();
     }
 
-    void locked(String kind, long until) {
-        Rec rec = begin(kind, "locked", GuardPolicy.BAND_STRONG, 0, null);
+    void locked(String kind, long until, double usage, GuardPolicy policy) {
+        // The gauge shows today's real use (a lock can start before the goal is reached).
+        Rec rec = begin(kind, "locked", policy == null ? GuardPolicy.BAND_STRONG : policy.band(usage), usage, policy);
         rec.recorded = true; // The lock attempt row is written by the service.
         GuardCopy.Facts facts = host.facts();
-        overlay.gauge(1, 0, GuardPolicy.BAND_STRONG);
         LinearLayout box = overlay.vertical();
         TextView remaining = overlay.text(GuardCopy.countdown(until - System.currentTimeMillis()), 48, GuardOverlay.TEXT, true);
         remaining.setGravity(Gravity.CENTER);
