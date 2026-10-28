@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -17,9 +17,12 @@ const OFF_LINES = [
     `끄는 건 쉬워요. 다시 켜는 건 생각보다 어려워요. 오늘 ${minutes}분, 정말 괜찮으세요?`,
 ];
 
+const noSubscribe = () => () => {};
+
 export function GuardPanel() {
   const { data, recordAppEvent } = useStore();
-  const [native, setNative] = useState(false);
+  // 정적 빌드에서는 false로 그리고, 앱에서 다시 그릴 때 안드로이드 여부를 읽는다.
+  const native = useSyncExternalStore(noSubscribe, isNativeAndroid, () => false);
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [blocker, setBlocker] = useState<boolean | null>(null);
   const [confirmOff, setConfirmOff] = useState(false);
@@ -42,7 +45,6 @@ export function GuardPanel() {
 
   useEffect(() => {
     const onAndroid = isNativeAndroid();
-    setNative(onAndroid);
     let stopped = false;
 
     async function read() {
@@ -130,7 +132,7 @@ export function GuardPanel() {
         뜹니다. 일반 영상, 홈 피드, 검색에서는 개입하지 않습니다.
       </p>
       <p className="text-sm leading-6 text-muted-foreground">
-        기록은 이 기기에만 남습니다. 화면의 글, 메시지, 비밀번호, 계정은 읽거나
+        화면의 글, 메시지, 비밀번호, 계정은 읽거나
         저장하거나 보내지 않습니다. 쇼츠를 보다 다른 앱으로 넘어갔는지는 앱 이름만으로
         판단하고, 쇼츠를 작은 창(PIP)으로 계속 보는지는 화면에 떠 있는 YouTube 작은 창만
         확인합니다. 다른 앱의 이름은 기록하지 않습니다. 사용 시간과 차단 시간은 항상 실제
@@ -164,7 +166,7 @@ export function GuardPanel() {
         </p>
       ) : (
         <p className="text-sm leading-6 text-muted-foreground">
-          이 브라우저와 아이폰에서는 다른 앱의 Shorts·Reels를 막을 수 없습니다.
+          이 브라우저에서는 다른 앱의 Shorts·Reels를 막을 수 없습니다.
           접근성 설정 버튼은 설치한 안드로이드 앱 안에 있습니다. 스위치 선택은 이
           브라우저에 남습니다.
         </p>

@@ -292,9 +292,12 @@ export function StatsView() {
               <Row label="목표 초과" value={`${stats.overdraftCount}번`} />
               <Row label="오늘은 끝" value={stats.dayEndCount > 0 ? "스스로 마무리" : "없음"} />
             </Group>
-            <Group title="시간 잠금" summary={`${stats.blockCount}회 · 쉰 시간 ${formatClock(stats.restSeconds)}`}>
+            <Group
+              title="시간 잠금"
+              summary={stats.blockCount > 0 ? `${stats.blockCount}회 · 쉰 시간 ${formatClock(stats.restSeconds)}` : "없음"}
+            >
               <Row label="시간 잠금" value={`${stats.blockCount}회`} />
-              <Row label="쉰 시간" value={formatClock(stats.restSeconds)} />
+              <Row label="쉰 시간" value={stats.restSeconds >= 60 ? formatClock(stats.restSeconds) : "없음"} />
               <Row label="잠금 중 시도" value={`${stats.lockAttemptCount}회`} />
               {locks.map((item) => (
                 <Row key={item.id} label={formatTime(item.createdAt)} value={`남은 잠금 ${formatClock(item.remainingSec)}`} />

@@ -335,11 +335,6 @@ export function SettingsView() {
       <section className="space-y-2 text-sm leading-6 text-muted-foreground">
         <h2 className="text-base font-medium text-foreground">폰에 설치</h2>
         <p>
-          아이폰은 Safari에서 이 페이지를 연 뒤 공유 버튼을 누르고{" "}
-          <strong className="font-medium text-foreground">홈 화면에 추가</strong>를
-          고르세요. 한 번 열린 뒤에는 네트워크가 없어도 홈 화면 아이콘으로 열립니다.
-        </p>
-        <p>
           안드로이드는{" "}
           {RELEASES_URL ? (
             <a className="underline" href={RELEASES_URL}>
@@ -379,7 +374,7 @@ export function SettingsView() {
           브라우저에서는 다른 앱을 막지 않습니다. 안드로이드 설치본은 접근성을 켠
           뒤에 YouTube Shorts 플레이어와 Instagram Reels 플레이어만 구분합니다.
           둘 다 영상이 멈추고 그 위에 같은 질문이 뜹니다. 화면의 글이나 다른 앱의 내용은
-          읽거나 저장하지 않고, 기록은 이 기기 밖으로 보내지 않습니다.
+          읽거나 저장하지 않습니다.
         </p>
       </section>
     </div>

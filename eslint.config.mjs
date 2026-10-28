@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Capacitor가 복사한 웹 빌드와 Gradle 결과물 (직접 쓴 코드가 아니다)
+    "android/**",
   ]),
 ]);
 

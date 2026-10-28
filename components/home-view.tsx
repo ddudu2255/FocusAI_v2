@@ -9,6 +9,7 @@ import { useNow } from "@/components/use-now";
 import { HanbakjaGuard } from "@/lib/guard";
 import {
   blockRemainingSeconds,
+  firstRecordDate,
   formatClock,
   getMonthProgress,
   goalMinutesOn,
@@ -92,10 +93,13 @@ export function HomeView() {
   const kept = commitEnds.filter((log) => log.outcome === "kept").length;
   const reopened = todayLogs.filter((log) => log.reenteredWithin30 === true).length;
 
-  const forest = past.map((p) => ({
-    label: `${p.month}월`,
-    stage: p.hasRecords ? stageForMonth(p.keptDays, p.countedDays, p.elapsedDays) : 0,
-  }));
+  // 설치 전 달(센 날이 없는 달)은 숲에 넣지 않는다. 처음 설치한 달에는 숲 칸이 안 보인다.
+  const forest = past
+    .filter((p) => firstRecordDate(data) !== null && p.countedDays > 0)
+    .map((p) => ({
+      label: `${p.month}월`,
+      stage: p.hasRecords ? stageForMonth(p.keptDays, p.countedDays, p.elapsedDays) : 0,
+    }));
   const grown = forest.filter((m) => m.stage >= 1).length;
 
   return (
@@ -212,22 +216,24 @@ export function HomeView() {
         {compareLine ? <p className="mt-3 text-[13px] leading-5 text-muted-foreground">{compareLine}</p> : null}
       </section>
 
-      <section className="rounded-3xl bg-card p-4 ring-1 ring-foreground/10">
-        <div className="mb-2.5 flex items-baseline justify-between gap-2.5">
-          <p className="text-[13px] font-semibold text-muted-foreground">지난 달의 숲</p>
-          <span className="text-[12.5px] text-muted-foreground">나무 {grown}그루</span>
-        </div>
-        <div className="grid grid-cols-3 gap-2.5">
-          {forest.map((m) => (
-            <div key={m.label} className="overflow-hidden rounded-xl bg-gradient-to-b from-[var(--sky-2)] to-[var(--sky-1)] text-center">
-              <TreeView stage={m.stage} sway={false} title={`${m.label} ${STAGES[m.stage].name}`} className="block h-auto w-full" />
-              <span className="block bg-muted px-0.5 pt-1 pb-1.5 text-[11.5px] text-muted-foreground">
-                {m.label} <b className="font-semibold text-foreground">{STAGES[m.stage].name}</b>
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
+      {forest.length > 0 ? (
+        <section className="rounded-3xl bg-card p-4 ring-1 ring-foreground/10">
+          <div className="mb-2.5 flex items-baseline justify-between gap-2.5">
+            <p className="text-[13px] font-semibold text-muted-foreground">지난 달의 숲</p>
+            <span className="text-[12.5px] text-muted-foreground">나무 {grown}그루</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2.5">
+            {forest.map((m) => (
+              <div key={m.label} className="overflow-hidden rounded-xl bg-gradient-to-b from-[var(--sky-2)] to-[var(--sky-1)] text-center">
+                <TreeView stage={m.stage} sway={false} title={`${m.label} ${STAGES[m.stage].name}`} className="block h-auto w-full" />
+                <span className="block bg-muted px-0.5 pt-1 pb-1.5 text-[11.5px] text-muted-foreground">
+                  {m.label} <b className="font-semibold text-foreground">{STAGES[m.stage].name}</b>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

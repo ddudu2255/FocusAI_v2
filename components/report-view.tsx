@@ -6,7 +6,16 @@ import { useStore } from "@/components/store";
 import { useNow } from "@/components/use-now";
 import { reportLine } from "@/lib/compare";
 import { isNativeAndroid } from "@/lib/guard";
-import { formatClock, formatTime, goalMinutesOn, isReportDue, statsForDate, todayKey, usageSecondsOn } from "@/lib/logic";
+import {
+  firstRecordDate,
+  formatClock,
+  formatTime,
+  goalMinutesOn,
+  isReportDue,
+  statsForDate,
+  todayKey,
+  usageSecondsOn,
+} from "@/lib/logic";
 import {
   bestMethod,
   dayParts,
@@ -63,7 +72,10 @@ export function ReportView() {
   const gap = usual === null ? 0 : minutes(usage) - minutes(usual);
   const yesterday = new Date(date);
   yesterday.setDate(date.getDate() - 1);
-  const yesterdaySeconds = usageSecondsOn(data, todayKey(yesterday));
+  const yesterdayKey = todayKey(yesterday);
+  // 설치 전날처럼 기록이 생기기 전이면 0분이 아니라 "–"로 둔다.
+  const first = firstRecordDate(data);
+  const yesterdaySeconds = first !== null && yesterdayKey >= first ? usageSecondsOn(data, yesterdayKey) : null;
   const week = weekSummary(weekSeries(data, date));
 
   const parts = dayParts(data, today);
@@ -137,8 +149,8 @@ export function ReportView() {
               )
             }
           />
-          <Compare label="어제" value={`${minutes(yesterdaySeconds)}분`} />
-          <Compare label="이번 주 지킨 날" value={`${week.kept} / ${week.counted}`} />
+          <Compare label="어제" value={yesterdaySeconds === null ? "–" : `${minutes(yesterdaySeconds)}분`} />
+          <Compare label="최근 7일 지킨 날" value={`${week.kept} / ${week.counted}`} />
         </dl>
       </section>
 
