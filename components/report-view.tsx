@@ -150,7 +150,10 @@ export function ReportView() {
               )
             }
           />
-          <Compare label="어제" value={yesterdaySeconds === null ? "–" : `${minutes(yesterdaySeconds)}분`} />
+          <Compare
+            label="어제"
+            value={yesterdaySeconds === null ? "–" : `${shownMinutes(yesterdaySeconds, goalMinutesOn(data, yesterdayKey))}분`}
+          />
           <Compare label="최근 7일 지킨 날" value={`${week.kept} / ${week.counted}`} />
         </dl>
       </section>
