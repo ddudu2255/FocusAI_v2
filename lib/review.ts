@@ -4,6 +4,7 @@ import {
   goalMinutesOn,
   hourlyUsage,
   lastDates,
+  secondsOnDate,
   SELF_STOP_OUTCOMES,
   todayKey,
   usageSecondsOn,
@@ -173,10 +174,17 @@ export function usualDifferences(data: AppData, now = new Date()): Difference[] 
   const today = todayKey(now);
   const out: Difference[] = [];
 
-  const night = (date: string) => hourlyUsage(data, date).slice(21).reduce((a, b) => a + b, 0);
+  // 밤(21시~)은 21시가 지나야 비교하고, 평소도 지금 시각까지만 센다. 낮에 "밤 시청이 짧았어요"가 나오지 않게.
+  const offset = now.getTime() - dayRange(today)[0];
+  const night = (date: string) => {
+    const [start] = dayRange(date);
+    return secondsBetween(data, start + 21 * 3_600_000, start + offset);
+  };
   const nightToday = night(today);
   const nightUsual = days.reduce((sum, d) => sum + night(d), 0) / days.length;
-  if (nightUsual >= 5 * 60 && nightToday <= nightUsual * 0.6) {
+  if (now.getHours() < 21) {
+    // 아직 밤이 아니다.
+  } else if (nightUsual >= 5 * 60 && nightToday <= nightUsual * 0.6) {
     out.push({ text: "밤 시청이 짧았어요", detail: `${minutes(nightToday)}분 (평소 ${minutes(nightUsual)}분)` });
   } else if (nightToday >= 5 * 60 && nightToday >= Math.max(nightUsual * 1.5, nightUsual + 5 * 60)) {
     out.push({ text: "밤 시청이 길었어요", detail: `${minutes(nightToday)}분 (평소 ${minutes(nightUsual)}분)` });
@@ -196,6 +204,62 @@ export function usualDifferences(data: AppData, now = new Date()): Difference[] 
     out.push({ text: "잠금을 스스로 걸었어요", detail: `${rest}분 쉼` });
   }
   return out.slice(0, 3);
+}
+
+/** from~to(ms) 사이에 본 초. 걸친 세션은 시간 비율대로 나눈다. */
+export function secondsBetween(data: AppData, from: number, to: number): number {
+  if (to <= from) return 0;
+  return data.usageLogs.reduce((sum, log) => {
+    const start = new Date(log.startTime).getTime();
+    const end = new Date(log.endTime).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return sum;
+    const overlap = Math.min(end, to) - Math.max(start, from);
+    return overlap > 0 ? sum + log.duration * (overlap / (end - start)) : sum;
+  }, 0);
+}
+
+/**
+ * 평소 이 시각까지 본 시간(초): 최근 7일(기록이 생긴 뒤)의 0시~지금 시각 평균.
+ * 하루가 끝나기 전 리포트가 반나절을 하루 전체와 비교하지 않게 한다. 3일 미만이면 null.
+ */
+export function usualByNow(data: AppData, now = new Date()): number | null {
+  const days = usualDays(data, now);
+  if (days.length < USUAL_MIN_DAYS) return null;
+  const offset = now.getTime() - dayRange(todayKey(now))[0];
+  const total = days.reduce((sum, date) => {
+    const [start] = dayRange(date);
+    return sum + secondsBetween(data, start, start + offset);
+  }, 0);
+  return total / days.length;
+}
+
+export type DayPart = { label: string; range: string; seconds: number };
+
+/** 리포트 "언제 봤나요": 하루를 4칸으로 나눈 시청 초. */
+export function dayParts(data: AppData, date: string): DayPart[] {
+  const hours = hourlyUsage(data, date);
+  const sum = (from: number, to: number) => hours.slice(from, to).reduce((a, b) => a + b, 0);
+  return [
+    { label: "새벽", range: "0~6시", seconds: sum(0, 6) },
+    { label: "오전", range: "6~12시", seconds: sum(6, 12) },
+    { label: "오후", range: "12~18시", seconds: sum(12, 18) },
+    { label: "저녁·밤", range: "18~24시", seconds: sum(18, 24) },
+  ];
+}
+
+/** 그날 한 번에 가장 길게 본 시청. 없으면 null. */
+export function longestWatch(data: AppData, date: string): { startTime: string; seconds: number } | null {
+  let best: { startTime: string; seconds: number } | null = null;
+  for (const log of data.usageLogs) {
+    const seconds = secondsOnDate(log, date);
+    if (seconds > 0 && (!best || seconds > best.seconds)) best = { startTime: log.startTime, seconds };
+  }
+  return best;
+}
+
+/** 그날 연 횟수 (그날에 걸친 시청 수). */
+export function opensOn(data: AppData, date: string): number {
+  return data.usageLogs.filter((log) => secondsOnDate(log, date) > 0).length;
 }
 
 /** 최근 14일 동안 위험 높음으로 본 열기가 가장 많았던 시. 3번 미만이면 null. */

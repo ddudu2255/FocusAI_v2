@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   bestMethod,
+  dayParts,
   dayTimeline,
   hourLabel,
+  longestWatch,
   methodResults,
+  opensOn,
   peakHour,
   riskyHour,
+  usualByNow,
   usualDifferences,
   weakMethod,
   weekSeries,
@@ -188,5 +192,33 @@ describe("review: report", () => {
     };
     assert.equal(riskyHour(data, new Date(2026, 9, 28, 23)), 21);
     assert.equal(riskyHour({ ...data, openLogs: data.openLogs.slice(1) }, new Date(2026, 9, 28, 23)), null);
+  });
+});
+
+describe("review: report", () => {
+  const days = [24, 25, 26, 27].map((d) => session(`u${d}`, d, 21, 30));
+
+  it("does not compare the night before 9 p.m.", () => {
+    const data = { ...defaultData(), usageLogs: days };
+    assert.deepEqual(usualDifferences(data, new Date(2026, 9, 28, 15)), []);
+  });
+
+  it("compares the usual time only up to the same clock time", () => {
+    const data = { ...defaultData(), usageLogs: [...days, session("m", 24, 9, 20)] };
+    // 평소 오후 3시까지: 24일 아침 20분만 → 4일 평균 5분
+    assert.equal(usualByNow(data, new Date(2026, 9, 28, 15)), 5 * 60);
+    assert.equal(usualByNow(data, new Date(2026, 9, 28, 23)), (4 * 30 + 20) * 60 / 4);
+    assert.equal(usualByNow({ ...data, usageLogs: [session("x", 27, 21, 10)] }, new Date(2026, 9, 28, 23)), null);
+  });
+
+  it("splits the day into four parts and finds the longest watch", () => {
+    const data = {
+      ...defaultData(),
+      usageLogs: [session("a", 28, 1, 10), session("b", 28, 8, 5), session("c", 28, 22, 25), session("d", 27, 22, 40)],
+    };
+    assert.deepEqual(dayParts(data, key(28)).map((p) => p.seconds / 60), [10, 5, 0, 25]);
+    assert.deepEqual(longestWatch(data, key(28)), { startTime: local(28, 22), seconds: 25 * 60 });
+    assert.equal(opensOn(data, key(28)), 3);
+    assert.equal(longestWatch(data, key(20)), null);
   });
 });
