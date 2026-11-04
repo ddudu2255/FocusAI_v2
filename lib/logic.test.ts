@@ -559,7 +559,7 @@ describe("policy and cards", () => {
     const policy = buildPolicy({ ...defaultSettings(), level3Threshold: 30, dayEndHour: 7 });
     assert.equal(policy.goalMinutes, 30);
     assert.equal(policy.dayEndHour, 7);
-    assert.deepEqual(policy.commitOptions, [3, 5, 10]);
+    assert.deepEqual(policy.commitOptions, [1, 3, 5, 10]);
     assert.ok(policy.methods.medium.includes("card"));
   });
 

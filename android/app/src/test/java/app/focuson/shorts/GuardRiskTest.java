@@ -134,7 +134,11 @@ public class GuardRiskTest {
 
     @Test
     public void highRiskOffersOnlyShortChoices() {
-        assertEquals(Collections.singletonList(3), GuardFlow.capped(Arrays.asList(3, 5, 10), 3));
+        assertEquals(Arrays.asList(1, 3), GuardFlow.capped(Arrays.asList(1, 3, 5, 10), 3));
+        // The suggestion stays on 3 minutes, not the first chip.
+        assertEquals(3, GuardFlow.suggestedChoice(Arrays.asList(1, 3, 5, 10), 3));
+        assertEquals(3, GuardFlow.suggestedChoice(Arrays.asList(1, 3), 3));
+        assertEquals(1, GuardFlow.suggestedChoice(Collections.singletonList(1), 3));
         // Less than 3 minutes left: keep what is offered.
         assertEquals(Collections.singletonList(2), GuardFlow.capped(Collections.singletonList(2), 3));
         assertEquals(Collections.singletonList(5), GuardFlow.capped(Collections.singletonList(5), 3));

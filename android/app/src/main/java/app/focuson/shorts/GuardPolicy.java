@@ -220,7 +220,7 @@ final class GuardPolicy {
             1.0,
             Arrays.asList("pause", "framing"),
             Arrays.asList("breath", "alternative", "reflection", "card", "pause", "framing"),
-            new int[] {3, 5, 10},
+            new int[] {1, 3, 5, 10},
             new int[] {10, 5, 3},
             3,
             3,

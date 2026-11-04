@@ -11,7 +11,7 @@ import org.json.JSONObject;
  * watching at least half of the day's goal. Same arithmetic as lib/risk.ts; the weights come
  * from the policy table ({@link GuardPolicy.Model}) and are re-learned on the web side.
  *
- * What the band does to the sheet ({@link #action}): high = 3-minute choices (extensions
+ * What the band does to the sheet ({@link #action}): high = choices up to 3 minutes (extensions
  * stay, also 3 minutes) and a 10 s wait before "3분만 더"; medium = a "3분 · 추천" chip.
  * The bandit may soften either by one step ("soft"). No Android types except in callers.
  */

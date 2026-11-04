@@ -140,7 +140,7 @@ export function buildPolicy(settings: Settings, data?: AppData, now = new Date()
     },
     studyMode: settings.studyMode,
     compare: data ? sheetCompare(data.compare) : null,
-    commitOptions: [3, 5, 10],
+    commitOptions: [1, 3, 5, 10],
     extensionLadder: [10, 5, 3],
     overdraftMinutes: 3,
     overdraftWaitSec: 3,

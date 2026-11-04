@@ -27,7 +27,7 @@ import org.json.JSONObject;
  * Commitment over: [band went up → that band's activity] → kept (leave) or extend.
  * Strong: day end / lock / "3분만 더" (through a nudge screen) / leave.
  * The predicted risk of this open ({@link GuardRisk}) shapes the commitment chips and the
- * "3분만 더" wait: high = 3-minute choices only (extensions stay) and a longer wait,
+ * "3분만 더" wait: high = choices up to 3 minutes (extensions stay) and a longer wait,
  * medium = a "3분 · 추천" chip; the bandit may soften either by one step.
  * Locked ("쇼츠 쉬는 중" / "릴스 쉬는 중"): remaining time, rest so far, optionally one study card.
  */
@@ -622,8 +622,8 @@ final class GuardFlow {
         }
         List<TextView> chips = new ArrayList<>();
         for (int minutes : choices) {
-            boolean suggested = suggest && minutes == choices.get(0);
-            TextView chip = overlay.chip(minutes + "분" + (suggested ? " · 추천" : ""));
+            boolean suggested = suggest && minutes == suggestedChoice(choices, policy.ai.riskCommitMax);
+            TextView chip = overlay.chip(minutes + "분" + (suggested ? "\n추천" : ""));
             if (suggested) overlay.tint(chip, GuardOverlay.CARD_ON);
             chip.setOnClickListener(v -> {
                 if (rec.recorded) return;
@@ -640,7 +640,7 @@ final class GuardFlow {
             subtitle = "오늘 남은 시간 " + GuardCopy.clock(policy.remainingSeconds(rec.usage))
                 + ". 정한 시간이 되면 멈춰 드려요.";
         }
-        overlay.step(extensionIndex > 0 ? "몇 분만 더 볼래요?" : "몇 분 볼래요?", subtitle, overlay.grid(chips, 3, 56));
+        overlay.step(extensionIndex > 0 ? "몇 분만 더 볼래요?" : "몇 분 볼래요?", subtitle, overlay.grid(chips, Math.max(3, chips.size()), 56));
     }
 
     private void strongChoices(Rec rec, GuardPolicy policy, String headline) {
@@ -852,6 +852,13 @@ final class GuardFlow {
         if (line == null) line = GuardCopy.compareLine(rec.kind, exit ? compare.shortOf10[hour] : compare.exitOf10[hour], !exit, compare.demo);
         if (line != null) GuardState.bumpToday(context, "compare", now);
         return line;
+    }
+
+    /** The chip to recommend: the longest choice up to {@code max} (3 minutes stays the suggestion next to 1). */
+    static int suggestedChoice(List<Integer> choices, int max) {
+        int best = choices.get(0);
+        for (int c : choices) if (c <= max) best = c;
+        return best;
     }
 
     /** Choices up to {@code max} minutes; the shortest one when none fits. */

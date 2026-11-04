@@ -25,15 +25,18 @@ public class GuardPolicyTest {
 
     @Test
     public void commitmentChoicesFitBudgetAndLadder() {
-        assertEquals(Arrays.asList(3, 5, 10), policy.commitChoices(15 * 60, 0));
-        assertEquals(Arrays.asList(3, 5), policy.commitChoices(7 * 60, 0));
+        assertEquals(Arrays.asList(1, 3, 5, 10), policy.commitChoices(15 * 60, 0));
+        assertEquals(Arrays.asList(1, 3, 5), policy.commitChoices(7 * 60, 0));
         // Extension ladder: second ask caps at 10, third at 5, then 3.
-        assertEquals(Arrays.asList(3, 5, 10), policy.commitChoices(15 * 60, 1));
-        assertEquals(Arrays.asList(3, 5), policy.commitChoices(15 * 60, 2));
-        assertEquals(Collections.singletonList(3), policy.commitChoices(15 * 60, 3));
-        assertEquals(Collections.singletonList(3), policy.commitChoices(15 * 60, 9));
+        assertEquals(Arrays.asList(1, 3, 5, 10), policy.commitChoices(15 * 60, 1));
+        assertEquals(Arrays.asList(1, 3, 5), policy.commitChoices(15 * 60, 2));
+        assertEquals(Arrays.asList(1, 3), policy.commitChoices(15 * 60, 3));
+        assertEquals(Arrays.asList(1, 3), policy.commitChoices(15 * 60, 9));
+        // Under 3 minutes left: 1 fits, so only 1 is offered (decided 2026-11-04).
+        assertEquals(Collections.singletonList(1), policy.commitChoices(100, 0));
+        assertEquals(Collections.singletonList(1), policy.commitChoices(150, 0));
         // Less than the smallest option left: offer what is left, rounded up.
-        assertEquals(Collections.singletonList(2), policy.commitChoices(100, 0));
+        assertEquals(Collections.singletonList(1), policy.commitChoices(45, 0));
         assertEquals(Collections.emptyList(), policy.commitChoices(10, 0));
     }
 
