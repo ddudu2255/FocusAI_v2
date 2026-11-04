@@ -40,7 +40,23 @@ public class GuardCopyTest {
         f.avg7 = 15 * 60;
         f.weekProjection = 160 * 60;
         assertEquals("어제 이 시간엔 12분이었는데, 오늘은 벌써 23분이에요.", GuardCopy.insight("yesterday", f));
-        assertEquals("이번 주 평균보다 8분 더 보고 있어요.", GuardCopy.insight("average", f));
+        assertEquals("최근 7일 평균보다 8분 더 보고 있어요.", GuardCopy.insight("average", f));
+        // Under 3 minutes apart: skipped, so rounding can't show "1분" and "1분".
+        GuardCopy.Facts close = facts(70.0 / 60, 30);
+        close.yesterdayByNow = 6;
+        assertNull(GuardCopy.insight("yesterday", close));
+        close.usage = 299;
+        close.yesterdayByNow = 120;
+        close.avg7 = 120;
+        assertNull(GuardCopy.insight("yesterday", close));
+        assertNull(GuardCopy.insight("average", close));
+        close.usage = 300;
+        assertEquals("어제 이 시간엔 2분이었는데, 오늘은 벌써 5분이에요.", GuardCopy.insight("yesterday", close));
+        assertEquals("최근 7일 평균보다 3분 더 보고 있어요.", GuardCopy.insight("average", close));
+        // Almost nothing yesterday: says so instead of "1분".
+        close.usage = 8 * 60;
+        close.yesterdayByNow = 6;
+        assertEquals("어제 이 시간엔 거의 안 봤는데, 오늘은 벌써 8분이에요.", GuardCopy.insight("yesterday", close));
         assertEquals("이 속도면 이번 주에 2시간 40분을 쇼츠에 써요.", GuardCopy.insight("weekly", f));
 
         f.sleepSeconds = (6 * 60 + 20) * 60;

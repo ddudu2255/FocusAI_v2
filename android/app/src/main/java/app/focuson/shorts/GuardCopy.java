@@ -159,6 +159,9 @@ final class GuardCopy {
 
     // --- S1. Time line (entry sheet) -------------------------------------------
 
+    /** Below this the comparison says nothing, and rounding can even show two equal numbers. */
+    private static final double MIN_GAP_SEC = 180;
+
     static String insight(String kind, Facts f) {
         return insight(kind, f, "youtube");
     }
@@ -178,12 +181,13 @@ final class GuardCopy {
             case "future":
                 return "자기 전의 나는 오늘 이 " + minutes(f.usage) + "을 어떻게 생각할까요?";
             case "yesterday":
-                if (f.yesterdayByNow < 0 || f.usage - f.yesterdayByNow < 60) return null;
+                if (f.yesterdayByNow < 0 || f.usage - f.yesterdayByNow < MIN_GAP_SEC) return null;
+                if (f.yesterdayByNow < 60) return "어제 이 시간엔 거의 안 봤는데, 오늘은 벌써 " + minutes(f.usage) + "이에요.";
                 return "어제 이 시간엔 " + minutes(f.yesterdayByNow) + "이었는데, 오늘은 벌써 "
                     + minutes(f.usage) + "이에요.";
             case "average":
-                if (f.avg7 <= 0 || f.usage - f.avg7 < 60) return null;
-                return "이번 주 평균보다 " + minutes(f.usage - f.avg7) + " 더 보고 있어요.";
+                if (f.avg7 <= 0 || f.usage - f.avg7 < MIN_GAP_SEC) return null;
+                return "최근 7일 평균보다 " + minutes(f.usage - f.avg7) + " 더 보고 있어요.";
             case "goal":
                 if (f.usage >= f.goal) return null;
                 return "정한 " + minutes(f.goal) + " 중 " + minutes(f.usage) + "을 썼어요.";

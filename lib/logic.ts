@@ -213,6 +213,9 @@ export function minutesText(seconds: number): string {
   return `${total}분`;
 }
 
+/** 어제·평균과 비교할 때 최소 차이(초). 더 작으면 할 말이 없고, 반올림하면 두 숫자가 같아 보이기도 한다. */
+const INSIGHT_MIN_GAP_SEC = 180;
+
 /** 숫자가 없거나 의미가 없으면 null (그 문구는 건너뛴다). */
 export function insightLine(kind: string, f: InsightFacts): string | null {
   if (f.usage < 60) return null;
@@ -231,13 +234,14 @@ export function insightLine(kind: string, f: InsightFacts): string | null {
     case "future":
       return `자기 전의 나는 오늘 이 ${minutesText(f.usage)}을 어떻게 생각할까요?`;
     case "yesterday":
-      return f.yesterdayByNow < 0 || f.usage - f.yesterdayByNow < 60
-        ? null
+      if (f.yesterdayByNow < 0 || f.usage - f.yesterdayByNow < INSIGHT_MIN_GAP_SEC) return null;
+      return f.yesterdayByNow < 60
+        ? `어제 이 시간엔 거의 안 봤는데, 오늘은 벌써 ${minutesText(f.usage)}이에요.`
         : `어제 이 시간엔 ${minutesText(f.yesterdayByNow)}이었는데, 오늘은 벌써 ${minutesText(f.usage)}이에요.`;
     case "average":
-      return f.avg7 <= 0 || f.usage - f.avg7 < 60
+      return f.avg7 <= 0 || f.usage - f.avg7 < INSIGHT_MIN_GAP_SEC
         ? null
-        : `이번 주 평균보다 ${minutesText(f.usage - f.avg7)} 더 보고 있어요.`;
+        : `최근 7일 평균보다 ${minutesText(f.usage - f.avg7)} 더 보고 있어요.`;
     case "goal":
       return f.usage >= f.goal ? null : `정한 ${minutesText(f.goal)} 중 ${minutesText(f.usage)}을 썼어요.`;
     case "sleep":

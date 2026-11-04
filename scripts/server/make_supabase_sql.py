@@ -6,6 +6,7 @@
 되돌리기는 supabase/shortsai_v1_rollback.sql (sai_ 표·함수만 지운다).
 
 시연 데이터와 유형별 시작값은 가상 사용자(scripts/risk-model/out/data.npz)로 계산해 넣는다.
+단 시연 비교의 "바로 나감" 비율과 평균 지킨 날은 계산값이 아니라 화면을 보여 주기 위한 예시 값이다 (DEMO_*).
 실제 사용자에게 진짜처럼 보여 주지 않는다: 시연 비교는 demo = true로만 돌려준다.
 
 실행: python scripts/server/make_supabase_sql.py   (먼저 scripts/risk-model/simulate.py)
@@ -28,6 +29,17 @@ OUT = ROOT / "supabase" / "shortsai_v1.sql"
 # 앱에 넣는 같은 유형 정보: 처음 질문을 폰 안에서 고르게 한다 (서버로 아무것도 보내지 않음)
 CLUSTERS_TS = ROOT / "lib" / "clusters.ts"
 MIN_USERS = 20
+# 시연 화면용 예시 값 (사용자 결정 2026-11-04). 시뮬레이션 계산값(나감 약 10%, 평균 1.2~1.6일)은 문구가 의욕을 꺾어 바꿨다.
+# 결과처럼 말하지 않는다. 실제 사용자 계산(sai_compare(false))과는 상관없다.
+DEMO_EXIT_DAY_HOURS = range(6, 21)
+DEMO_EXIT_DAY = 0.6
+DEMO_EXIT_NIGHT = 0.5
+DEMO_BY_GOAL = {
+    "≤30": dict(users=35, avgKeptDays=3.8),
+    "31-45": dict(users=104, avgKeptDays=4.2),
+    "46-60": dict(users=45, avgKeptDays=4.6),
+    "61+": dict(users=20, avgKeptDays=5.0),
+}
 SLOTS = {"morning": range(5, 11), "day": range(11, 17), "evening": range(17, 22), "night": [22, 23, 0, 1, 2, 3, 4]}
 GOAL_BUCKETS = [(30, "≤30"), (45, "31-45"), (60, "46-60"), (10_000, "61+")]
 NAMES = {
@@ -88,7 +100,11 @@ def main() -> None:
         by_goal[name] = (
             dict(users=len(rows), avgKeptDays=round(float(np.mean(rows)), 1)) if len(rows) >= MIN_USERS else None
         )
-    demo = dict(byHour=by_hour, byGoal=by_goal, minUsers=MIN_USERS, days=14)
+    print("시뮬레이션 계산값 (참고, 시연에는 DEMO_BY_GOAL을 쓴다):", by_goal)
+    for h, row in enumerate(by_hour):
+        if row:
+            row["exitRate"] = DEMO_EXIT_DAY if h in DEMO_EXIT_DAY_HOURS else DEMO_EXIT_NIGHT
+    demo = dict(byHour=by_hour, byGoal=DEMO_BY_GOAL, minUsers=MIN_USERS, days=14)
 
     # --- 유형(성향)별 중심값과 시작 모델 ---
     X, names = compare.features(d)

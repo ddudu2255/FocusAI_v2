@@ -437,8 +437,24 @@ describe("v0.8.0 helpers", () => {
     );
     assert.equal(
       insightLine("average", { ...facts, avg7: 15 * 60 }),
-      "이번 주 평균보다 8분 더 보고 있어요.",
+      "최근 7일 평균보다 8분 더 보고 있어요.",
     );
+    // 차이가 3분 미만이면 건너뛴다 (어제 1분, 오늘 벌써 1분 같은 문장 방지)
+    assert.equal(insightLine("yesterday", { ...facts, usage: 70, yesterdayByNow: 6 }), null);
+    assert.equal(insightLine("yesterday", { ...facts, usage: 299, yesterdayByNow: 120 }), null);
+    assert.equal(
+      insightLine("yesterday", { ...facts, usage: 300, yesterdayByNow: 120 }),
+      "어제 이 시간엔 2분이었는데, 오늘은 벌써 5분이에요.",
+    );
+    assert.equal(insightLine("yesterday", { ...facts, usage: 10 * 60, yesterdayByNow: 20 * 60 }), null);
+    assert.equal(insightLine("average", { ...facts, usage: 17 * 60, avg7: 15 * 60 }), null);
+    assert.equal(insightLine("average", { ...facts, usage: 18 * 60, avg7: 15 * 60 }), "최근 7일 평균보다 3분 더 보고 있어요.");
+    // 어제 거의 안 봤으면 "1분" 대신 거의 안 봤다고 쓴다
+    assert.equal(
+      insightLine("yesterday", { ...facts, usage: 8 * 60, yesterdayByNow: 6 }),
+      "어제 이 시간엔 거의 안 봤는데, 오늘은 벌써 8분이에요.",
+    );
+    assert.equal(insightLine("yesterday", { ...facts, usage: 179, yesterdayByNow: 0 }), null);
     assert.equal(insightLine("guilt", { ...facts, usage: 30 }), null);
   });
 
