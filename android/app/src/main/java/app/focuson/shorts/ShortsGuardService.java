@@ -102,6 +102,10 @@ public class ShortsGuardService extends AccessibilityService {
     private boolean pipLeaving;
     private long pipLeftAt;
     private boolean pipExpandTried;
+    /** Until this time a "bring YouTube to the front" try is in flight: the PIP window going away
+     * then means it expanded, not that the user closed it (2026-11-07: the 1 s check won the race
+     * and the expanded player kept playing). */
+    private long pipExpandUntil;
     private boolean pipReasked;
     private boolean pipKeptWatching;
 
@@ -339,6 +343,7 @@ public class ShortsGuardService extends AccessibilityService {
     /** While waiting for the user to close a PIP window after "나가기". Called once a second. */
     private void checkPipLeave(long now) {
         if (!pipLeaving) return;
+        if (now < pipExpandUntil) return; // afterPipExpand decides
         if (!youtubePipVisible()) {
             pipLeaving = false;
             restoreAudio(false);
@@ -705,6 +710,7 @@ public class ShortsGuardService extends AccessibilityService {
             if (!pipExpandTried) {
                 pipExpandTried = true;
                 log("나가기: PIP → 큰 화면으로 펼치기 1회 시도");
+                pipExpandUntil = System.currentTimeMillis() + PIP_EXPAND_CHECK_MS + 200;
                 openYoutubeFront(this);
                 mainHandler.postDelayed(() -> afterPipExpand(kind), PIP_EXPAND_CHECK_MS);
             } else {

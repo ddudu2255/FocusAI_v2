@@ -151,6 +151,9 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* 한국어는 단어(어절) 단위로 줄을 바꾼다. "목표 / 를"처럼 조사만 떨어지지 않게. 아주 긴 단어만 쪼갠다. */
+    word-break: keep-all;
+    overflow-wrap: anywhere;
   }
   html {
     @apply font-sans;

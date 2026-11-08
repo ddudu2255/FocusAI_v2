@@ -357,7 +357,7 @@ describe("policy and feedback", () => {
   it("switches the policy between rules and AI", () => {
     const data = defaultData();
     const on = buildPolicy(data.settings, data);
-    assert.equal(on.version, "ai-3");
+    assert.equal(on.version, "ai-4");
     assert.equal(buildPolicy({ ...data.settings, banditV2: false }, data).version, "ai-1");
     assert.deepEqual(on.ai.habituation, { strength: 0.3, recoveryHours: 6 });
     assert.equal(buildPolicy({ ...data.settings, banditV2: false }, data).ai.habituation.strength, 0);
@@ -366,6 +366,36 @@ describe("policy and feedback", () => {
     assert.equal(off.version, "rule-2");
     assert.equal(off.ai.enabled, false);
     assert.equal(buildPolicy({ ...data.settings, strictMode: true }, data).ai.strict, true);
+  });
+
+  it("gives the service today's goal and the lowered goal from tomorrow", () => {
+    const now = new Date(2026, 10, 8, 14);
+    const data = {
+      ...defaultData(),
+      settings: { ...defaultData().settings, level3Threshold: 15 },
+      goalLog: [
+        { from: "0000-01-01", minutes: 30 },
+        { from: "2026-11-09", minutes: 15 },
+      ],
+    };
+    const policy = buildPolicy(data.settings, data, now);
+    assert.equal(policy.goalMinutes, 30); // 앱 홈·리포트와 같은 오늘 목표
+    assert.deepEqual(policy.goalNext, { from: "2026-11-09", minutes: 15 });
+    // 오늘 올리면: 오늘은 원래 목표, 내일부터 새 목표
+    const raised = {
+      ...defaultData(),
+      settings: { ...defaultData().settings, level3Threshold: 40 },
+      goalLog: [
+        { from: "0000-01-01", minutes: 30 },
+        { from: "2026-11-08", minutes: 40 },
+      ],
+    };
+    const up = buildPolicy(raised.settings, raised, now);
+    assert.equal(up.goalMinutes, 30);
+    assert.deepEqual(up.goalNext, { from: "2026-11-09", minutes: 40 });
+    const plain = buildPolicy(defaultData().settings, defaultData(), now);
+    assert.equal(plain.goalMinutes, defaultData().settings.level3Threshold);
+    assert.equal(plain.goalNext, null);
   });
 
   it("turns feedback rows into answers for the intervention", () => {

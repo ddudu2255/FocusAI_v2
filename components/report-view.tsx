@@ -127,7 +127,7 @@ export function ReportView() {
                 : "bg-[color-mix(in_srgb,var(--leaf-1)_16%,transparent)] text-[var(--leaf-2)]",
             )}
           >
-            {over ? `${overMinutes}분 넘음` : `${Math.max(0, goal - minutes(usage))}분 남음`}
+            {over ? `${overMinutes}분 넘음` : `${Math.max(0, goal - shownMinutes(usage, goal))}분 남음`}
           </span>
         </div>
         <div className="mt-3.5 h-3 overflow-hidden rounded-full bg-muted" aria-hidden="true">

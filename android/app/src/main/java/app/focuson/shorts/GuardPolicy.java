@@ -230,6 +230,29 @@ final class GuardPolicy {
 
     /** Reads the table the web side stored. Anything unreadable keeps its default. */
     static GuardPolicy fromJson(String raw, int fallbackGoal) {
+        return fromJson(raw, fallbackGoal, System.currentTimeMillis(), java.util.TimeZone.getDefault());
+    }
+
+    /**
+     * Today's goal: "goalMinutes", or "goalNext.minutes" once its day has come. A goal lowered
+     * below what was already watched starts tomorrow (same rule as the app's home and report),
+     * and this switches even if the app is not opened that day.
+     */
+    static int goalFor(JSONObject json, int fallback, long now, java.util.TimeZone zone) {
+        JSONObject next = json.optJSONObject("goalNext");
+        return goalOn(json.optInt("goalMinutes", fallback),
+            next == null ? "" : next.optString("from", ""),
+            next == null ? 0 : next.optInt("minutes", 0),
+            GuardTime.dayKey(now, zone));
+    }
+
+    /** {@code nextMinutes} from {@code nextFrom} (yyyy-MM-dd) on, otherwise {@code goal}. */
+    static int goalOn(int goal, String nextFrom, int nextMinutes, String today) {
+        if (nextFrom == null || nextFrom.isEmpty() || nextMinutes < 1) return goal;
+        return today.compareTo(nextFrom) >= 0 ? nextMinutes : goal;
+    }
+
+    static GuardPolicy fromJson(String raw, int fallbackGoal, long now, java.util.TimeZone zone) {
         GuardPolicy base = defaults(fallbackGoal);
         if (raw == null || raw.isEmpty()) return base;
         try {
@@ -237,7 +260,7 @@ final class GuardPolicy {
             JSONObject methods = json.optJSONObject("methods");
             GuardPolicy policy = new GuardPolicy(
                 json.optString("version", base.version),
-                json.optInt("goalMinutes", base.goalMinutes),
+                goalFor(json, base.goalMinutes, now, zone),
                 json.optDouble("mediumAt", base.mediumAt),
                 json.optDouble("strongAt", base.strongAt),
                 strings(methods == null ? null : methods.optJSONArray("light"), base.lightMethods),

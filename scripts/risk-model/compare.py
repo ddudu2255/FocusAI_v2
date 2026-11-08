@@ -1,7 +1,11 @@
 """
 규칙 · 로지스틱 회귀 · 랜덤 포레스트 비교 (예측 모델 2단계).
 
-simulate.py가 만든 out/data.npz를 읽는다.
+simulate_inertia.py가 만든 out/data_inertia.npz를 읽는다 (관성 있는 가상 사용자, 2026-11-07부터).
+
+정답 (lr-2, 2026-11-07): 이 열기 시작부터 끝난 뒤 30분까지 본 시간(다른 열기 포함) ≥ 그날 목표의 절반.
+  한 번에 몰아 보는 것뿐 아니라 짧게 쪼개 계속 다시 여는 관성도 "오래 봄"으로 본다.
+  예전 정답(lr-1)은 "이 열기 하나에서 목표의 절반 이상"이었다. 비교는 window_label.py, policy_sim_c.py.
 
 평가 세 가지:
   1. 새 사용자: 160명으로 학습, 처음 보는 40명으로 평가. APK에 넣을 시작 모델이 처음 설치한 사람에게 맞는지.
@@ -25,10 +29,15 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 
 OUT = Path(__file__).resolve().parent / "out"
+DATA_FILE = "data_inertia.npz"
+MODEL_VERSION = "lr-2"
+WINDOW_MIN = 30  # 정답을 볼 때 열기가 끝난 뒤 더 보는 시간 (lib/risk.ts LABEL_WINDOW_MS와 같다)
 SEED = 7
 STOP_MARGIN = 0.05
 BANDS = (0.4, 0.7)  # 위험도 경계값 초안 (HANDOFF)
-ALT_BANDS = (0.1, 0.2)  # 앱이 쓰는 경계 (6단계 시뮬레이션으로 정함, 사용자 확인 2026-10-26)
+# 앱이 처음 50번 열기 동안 쓰는 고정 경계. 새 사용자 처음 50번 중 높음 약 5%, 보통 이상 약 15%가 되는 값
+# (window_label.py, 관성 데이터·lr-2 정답, 2026-11-07). lr-1 때는 (0.1, 0.2).
+ALT_BANDS = (0.17, 0.30)
 CAP = 720.0  # 12시간 넘게 지난 것은 같은 값으로 본다
 
 
@@ -53,6 +62,26 @@ def features(d: dict) -> tuple[np.ndarray, list[str]]:
         cols.append((f"reason_{r}", (d["reason"] == r).astype(float)))
     names = [n for n, _ in cols]
     return np.column_stack([c for _, c in cols]), names
+
+
+def window_seconds(d: dict) -> np.ndarray:
+    """열기마다 [시작, 끝 + WINDOW_MIN] 안에 본 초 (같은 사용자·같은 날의 다른 열기 포함, 경계 밖은 자른다)."""
+    start = d["minute"].astype(float)
+    end = start + d["duration"] / 60.0
+    out = np.zeros(len(start))
+    key = d["user"].astype(np.int64) * 1000 + d["day"].astype(np.int64)
+    order = np.argsort(key, kind="stable")
+    for idx in np.split(order, np.flatnonzero(np.diff(key[order])) + 1):
+        s, e = start[idx], end[idx]
+        lo, hi = s[:, None], (e + WINDOW_MIN)[:, None]
+        overlap = np.clip(np.minimum(e[None, :], hi) - np.maximum(s[None, :], lo), 0, None)
+        out[idx] = overlap.sum(1) * 60.0
+    return out
+
+
+def labels(d: dict) -> np.ndarray:
+    """lr-2 정답: 열기 시작부터 끝난 뒤 30분까지 본 시간 ≥ 그날 목표의 절반."""
+    return (window_seconds(d) >= d["goal"] * 60 * 0.5).astype(int)
 
 
 def raw_features(d: dict) -> np.ndarray:
@@ -122,9 +151,9 @@ def online(X: np.ndarray, y: np.ndarray, users: np.ndarray, w0: np.ndarray, b0: 
 
 
 def main() -> None:
-    raw = np.load(OUT / "data.npz")
+    raw = np.load(OUT / DATA_FILE)
     d = {k: raw[k] for k in raw.files}
-    y = d["label"]
+    y = labels(d)
     X, names = features(d)
     R = raw_features(d)
     users = d["user"]
@@ -241,7 +270,7 @@ def export_start_model(d: dict, X: np.ndarray, y: np.ndarray, names: list[str]) 
             z[[names.index(f"reason_{r}") for r in range(1, 6)]] = 0.0
         checks.append(dict(raw=raw, p=float(1 / (1 + np.exp(-(z @ w + b))))))
     model_json = dict(
-        version="lr-1",
+        version=MODEL_VERSION,
         features=names,
         mean=[round(float(v), 6) for v in mean],
         std=[round(float(v), 6) for v in std],
@@ -261,7 +290,7 @@ def export_start_model(d: dict, X: np.ndarray, y: np.ndarray, names: list[str]) 
     path = Path(__file__).resolve().parents[2] / "lib" / "risk-model.ts"
     path.write_text(
         "// scripts/risk-model/compare.py가 만든 파일이다. 손으로 고치지 말고 스크립트를 다시 돌린다.\n"
-        "// 가상 사용자 200명으로 학습한 시작 모델 (docs/risk-model/README.md).\n"
+        "// 관성 있는 가상 사용자 200명, lr-2 정답(열기 시작~끝+30분 ≥ 목표 절반)으로 학습한 시작 모델 (docs/risk-model/README.md).\n"
         f"export const START_MODEL = {body} as const;\n",
         encoding="utf-8",
     )

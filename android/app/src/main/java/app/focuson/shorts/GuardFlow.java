@@ -76,6 +76,9 @@ final class GuardFlow {
     private GuardPolicy openPolicy;
     /** The open the sheets on screen belong to; null without a risk model. */
     private GuardRisk.Open risk;
+    /** The risk line was already shown for this open. Its reason ("방금 닫았다가 다시 열었어요") is
+     * about the moment of opening, so later sheets of the same open (extend, PIP re-ask) leave it out. */
+    private boolean riskNoticeShown;
     private final Random random = new Random();
 
     GuardFlow(Context context, GuardOverlay overlay, Handler handler, Host host) {
@@ -90,6 +93,7 @@ final class GuardFlow {
     /** A new open (or none). Scores it now; the reason, once chosen, scores it again. */
     void setOpen(GuardRisk.Open open, GuardPolicy policy) {
         risk = open;
+        riskNoticeShown = false;
         if (open != null) score(open, policy);
     }
 
@@ -611,8 +615,10 @@ final class GuardFlow {
             && policy.ai.beforeRisk(hourNow()) && !policy.ai.riskLabel.isEmpty();
         boolean suggest = reserve || action == GuardRisk.Action.SUGGEST;
         // R1·R2: why 3 minutes. The "남겨 둘까요?" hint already says why, and PIP keeps its note.
-        if (!reserve && !host.inPip() && risk != null && policy.ai.model != null) {
-            overlay.notice(GuardCopy.riskNotice(action, GuardRisk.topReason(policy.ai.model, risk.raw)));
+        if (!reserve && !host.inPip() && risk != null && policy.ai.model != null && !riskNoticeShown) {
+            String notice = GuardCopy.riskNotice(action, GuardRisk.topReason(policy.ai.model, risk.raw));
+            overlay.notice(notice);
+            if (notice != null) riskNoticeShown = true;
         }
         if (choices.isEmpty()) {
             rec.outcome = "budget_out";
@@ -640,7 +646,7 @@ final class GuardFlow {
             subtitle = "오늘 남은 시간 " + GuardCopy.clock(policy.remainingSeconds(rec.usage))
                 + ". 정한 시간이 되면 멈춰 드려요.";
         }
-        overlay.step(extensionIndex > 0 ? "몇 분만 더 볼래요?" : "몇 분 볼래요?", subtitle, overlay.grid(chips, Math.max(3, chips.size()), 56));
+        overlay.step(extensionIndex > 0 ? "몇 분만 더 볼래요?" : "몇 분 볼래요?", subtitle, overlay.grid(chips, Math.max(3, chips.size()), suggest ? 64 : 56));
     }
 
     private void strongChoices(Rec rec, GuardPolicy policy, String headline) {
@@ -734,6 +740,8 @@ final class GuardFlow {
         String line = GuardCopy.praise(outcome, GuardState.nextIndex(context, "praise_" + outcome), facts, rec.blockMinutes);
         String guide = host.inPip() ? "\n" + GuardCopy.PIP_CLOSE_GUIDE : "";
         overlay.leave(null, null);
+        // 멈춘 뒤에는 "짧게 3분은 어때요?" 같은 위험 문구를 남기지 않는다 (작은 창 안내는 남긴다).
+        if (!host.inPip()) overlay.notice(null);
         GuardPolicy policy = openPolicy;
         boolean askFeedback = policy != null && policy.ai.enabled
             && Math.floorMod(GuardState.nextIndex(context, "feedback"), policy.ai.feedbackEvery) == 0;
@@ -821,7 +829,7 @@ final class GuardFlow {
         overlay.open();
         openPolicy = policy;
         overlay.notice(host.inPip() ? GuardCopy.pipNote(kind) : null);
-        if (policy != null) overlay.gauge(policy.ratio(usage), policy.remainingSeconds(usage), band);
+        if (policy != null) overlay.gauge(policy.ratio(usage), policy.goalMinutes * 60.0 - usage, band); // 음수면 "목표 N분 넘음"
         Rec rec = new Rec(kind, stage, band, usage, policy == null ? "" : policy.version);
         rec.open = policy == null ? null : risk;
         open = rec;

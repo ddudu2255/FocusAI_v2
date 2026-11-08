@@ -134,8 +134,8 @@ export function SettingsView() {
             aria-invalid={Boolean(error)}
           />
           <p className="text-xs leading-5 text-muted-foreground">
-            오늘 쇼츠에 쓸 시간입니다. 목표의 절반까지는 가볍게, 절반을 넘으면 멈추는 활동을
-            하나 거치고, 목표를 넘으면 오늘을 마무리할지 고릅니다. 기본값은 20분입니다.
+            오늘 쇼츠에 쓸 시간입니다. 목표의 절반까지는 가볍게, 절반을 넘으면 조금 더 긴
+            멈추는 활동도 나오고, 목표를 넘으면 오늘을 마무리할지 고릅니다. 기본값은 20분입니다.
           </p>
         </div>
         <div className="space-y-2">
@@ -236,7 +236,7 @@ export function SettingsView() {
               : "이 브라우저에서 알림을 보낼 수 있습니다."
             : permission === "denied"
               ? native
-                ? "알림이 꺼져 있습니다. 휴대폰 설정 → 애플리케이션 → ShortsAI → 알림에서 허용해 주세요."
+                ? "알림이 꺼져 있습니다. 휴대폰 설정 → 애플리케이션 → Focus on → 알림에서 허용해 주세요."
                 : "알림이 차단되어 있습니다. 주소창의 사이트 설정에서 허용해 주세요."
               : permission === "unsupported"
                 ? "이 기기에서는 알림을 쓸 수 없습니다."
@@ -338,13 +338,13 @@ export function SettingsView() {
           안드로이드는{" "}
           {RELEASES_URL ? (
             <a className="underline" href={RELEASES_URL}>
-              ShortsAI APK
+              Focus on APK
             </a>
           ) : (
-            "GitHub Releases의 ShortsAI APK"
+            "GitHub Releases의 Focus on APK"
           )}
           를 받아 설치하세요. 출처를 알 수 없는 앱 설치를 허용해야 합니다. 설치 후
-          설정 → 접근성에서 ShortsAI를 켜야 실제 쇼츠와 릴스 플레이어에 개입합니다.
+          설정 → 접근성에서 Focus on을 켜야 실제 쇼츠와 릴스 플레이어에 개입합니다.
         </p>
       </section>
 
@@ -360,7 +360,7 @@ export function SettingsView() {
             }
           }}
         >
-          ShortsAI {APP_VERSION ? `버전 ${APP_VERSION}` : ""}
+          Focus on {APP_VERSION ? `버전 ${APP_VERSION}` : ""}
           {data.settings.demoMode ? " · 시연 모드" : ""}
         </p>
         <p>

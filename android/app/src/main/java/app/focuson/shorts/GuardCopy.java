@@ -86,21 +86,21 @@ final class GuardCopy {
         String head;
         switch (reason) {
             case TODAY:
-                head = "AI · 오늘 이미 꽤 봐서 길어지기 쉬워요.";
+                head = "오늘 이미 꽤 봐서 길어지기 쉬워요.";
                 break;
             case REOPEN:
-                head = "AI · 방금 닫았다가 다시 열었어요.";
+                head = "방금 닫았다가 다시 열었어요.";
                 break;
             case PREVIOUS:
-                head = "AI · 방금 길게 봤어요.";
+                head = "방금 길게 봤어요.";
                 break;
             case TIME:
-                head = "AI · 평소 길게 보던 때예요.";
+                head = "평소 길게 보던 때예요.";
                 break;
             default:
                 return shortOnly
-                    ? "AI · 지금은 길어지기 쉬운 때라 3분씩 끊어서 볼게요"
-                    : "AI · 지금은 길어지기 쉬워요. 짧게 3분은 어때요?";
+                    ? "지금은 길어지기 쉬운 때라 3분씩 끊어서 볼게요"
+                    : "지금은 길어지기 쉬워요. 짧게 3분은 어때요?";
         }
         if (!shortOnly) return head + " 짧게 3분은 어때요?";
         return head + (reason == GuardRisk.Reason.PREVIOUS ? " 이번엔 3분씩 끊어서 볼게요" : " 3분씩 끊어서 볼게요");
@@ -171,26 +171,26 @@ final class GuardCopy {
         String name = playerName(target);
         switch (kind) {
             case "guilt":
-                return "오늘 " + name + "에 쓴 " + minutes(f.usage) + ", 다시 돌아오지 않아요.";
+                return "오늘 " + name + "에 쓴 " + used(f) + ", 다시 돌아오지 않아요.";
             case "weekly":
                 if (f.weekProjection < 600) return null;
                 return "이 속도면 이번 주에 " + minutes(f.weekProjection) + "을 " + name + "에 써요.";
             case "motivate":
                 if (f.remaining() < 60) return null;
-                return "지금 멈추면 오늘 목표 안에서 끝낼 수 있어요. (" + minutes(f.remaining()) + " 남음)";
+                return "지금 멈추면 오늘 목표 안에서 끝낼 수 있어요. (" + left(f) + " 남음)";
             case "future":
-                return "자기 전의 나는 오늘 이 " + minutes(f.usage) + "을 어떻게 생각할까요?";
+                return "자기 전의 나는 오늘 이 " + used(f) + "을 어떻게 생각할까요?";
             case "yesterday":
                 if (f.yesterdayByNow < 0 || f.usage - f.yesterdayByNow < MIN_GAP_SEC) return null;
-                if (f.yesterdayByNow < 60) return "어제 이 시간엔 거의 안 봤는데, 오늘은 벌써 " + minutes(f.usage) + "이에요.";
+                if (f.yesterdayByNow < 60) return "어제 이 시간엔 거의 안 봤는데, 오늘은 벌써 " + used(f) + "이에요.";
                 return "어제 이 시간엔 " + minutes(f.yesterdayByNow) + "이었는데, 오늘은 벌써 "
-                    + minutes(f.usage) + "이에요.";
+                    + used(f) + "이에요.";
             case "average":
                 if (f.avg7 <= 0 || f.usage - f.avg7 < MIN_GAP_SEC) return null;
                 return "최근 7일 평균보다 " + minutes(f.usage - f.avg7) + " 더 보고 있어요.";
             case "goal":
                 if (f.usage >= f.goal) return null;
-                return "정한 " + minutes(f.goal) + " 중 " + minutes(f.usage) + "을 썼어요.";
+                return "정한 " + minutes(f.goal) + " 중 " + used(f) + "을 썼어요.";
             case "sleep":
                 return sleepLine(f);
             default:
@@ -212,7 +212,7 @@ final class GuardCopy {
                 return "약속을 지키면 오늘 스스로 멈춘 횟수가 하나 늘어요.";
             case 1:
                 if (f.remaining() >= 60) {
-                    return "오늘 목표까지 " + minutes(f.remaining()) + " 남았어요. 여기서 멈추면 여유가 생겨요.";
+                    return "오늘 목표까지 " + left(f) + " 남았어요. 여기서 멈추면 여유가 생겨요.";
                 }
                 return "약속을 지키면 오늘 스스로 멈춘 횟수가 하나 늘어요.";
             default:
@@ -232,9 +232,9 @@ final class GuardCopy {
                 + f.sleepBasis + ")";
         }
         if (Math.floorMod(index, 3) == 1) {
-            return "한 개만 더 보려다 30분이 지나기 쉬워요. 오늘은 이미 " + minutes(f.usage) + "이에요.";
+            return "한 개만 더 보려다 30분이 지나기 쉬워요. 오늘은 이미 " + used(f) + "이에요.";
         }
-        return "오늘 정한 " + minutes(f.goal) + "을 넘어 " + minutes(f.usage)
+        return "오늘 정한 " + minutes(f.goal) + "을 넘어 " + used(f)
             + "을 봤어요. 지금 멈추거나, 잠시 " + playerName(target) + "를 잠가 둘 수 있어요.";
     }
 
@@ -311,6 +311,21 @@ final class GuardCopy {
     // --- Formatting ------------------------------------------------------------
 
     /** Whole minutes for sentences: "23분", "2시간 40분". */
+    /**
+     * 오늘 본 시간: 목표 안이면 버림, 넘으면 올림 (앱 홈·통계와 같은 규칙, lib/review.ts shownMinutes).
+     * 예: 13분 38초 → "13분", 목표 20분에서 20분 10초 → "21분".
+     */
+    static String used(Facts f) {
+        double minutes = f.usage / 60.0;
+        long shown = f.usage > f.goal ? (long) Math.ceil(minutes) : (long) Math.floor(minutes);
+        return minutes(Math.max(1, shown) * 60.0);
+    }
+
+    /** 오늘 남은 시간: 올림 (홈 "N분 남았어요"와 같은 규칙). 본 시간(버림)과 더하면 목표가 된다. */
+    static String left(Facts f) {
+        return minutes(Math.max(1, Math.ceil(f.remaining() / 60.0)) * 60.0);
+    }
+
     static String minutes(double seconds) {
         long total = Math.max(1, Math.round(seconds / 60.0));
         long hours = total / 60;

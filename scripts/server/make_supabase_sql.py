@@ -106,7 +106,11 @@ def main() -> None:
             row["exitRate"] = DEMO_EXIT_DAY if h in DEMO_EXIT_DAY_HOURS else DEMO_EXIT_NIGHT
     demo = dict(byHour=by_hour, byGoal=DEMO_BY_GOAL, minUsers=MIN_USERS, days=14)
 
-    # --- 유형(성향)별 중심값과 시작 모델 ---
+    # --- 유형(성향)별 중심값과 시작 모델: 시작 모델과 같은 관성 데이터·lr-2 정답 (2026-11-07) ---
+    raw2 = np.load(ROOT / "scripts" / "risk-model" / "out" / compare.DATA_FILE)
+    d = {k: raw2[k] for k in raw2.files}
+    days = int(d["day"].max()) + 1
+    y = compare.labels(d)
     X, names = compare.features(d)
     mean, std = np.array(start["mean"]), np.array(start["std"])
     Z = (X - mean) / std
@@ -118,7 +122,7 @@ def main() -> None:
         hours = d["hour"][m]
         weights = d["duration"][m]
         share = {slot: float(weights[np.isin(hours, list(hs))].sum() / weights.sum()) for slot, hs in SLOTS.items()}
-        lr = LogisticRegression(max_iter=2000, C=1.0).fit(Z[m], d["label"][m])
+        lr = LogisticRegression(max_iter=2000, C=1.0).fit(Z[m], y[m])
         goal = float(np.median(d["goal"][m]))
         clusters.append(dict(
             id=str(persona),

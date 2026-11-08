@@ -204,6 +204,13 @@ export type InsightFacts = {
 };
 
 /** 문장용 분 표시: "23분", "2시간 40분". */
+/** 오늘 본 시간: 목표 안이면 버림, 넘으면 올림 (홈·통계와 같은 규칙). */
+function usedText(f: { usage: number; goal: number }): string {
+  const minutes = f.usage / 60;
+  const shown = f.usage > f.goal ? Math.ceil(minutes) : Math.floor(minutes);
+  return minutesText(Math.max(1, shown) * 60);
+}
+
 export function minutesText(seconds: number): string {
   const total = Math.max(1, Math.round(seconds / 60));
   const hours = Math.floor(total / 60);
@@ -222,7 +229,7 @@ export function insightLine(kind: string, f: InsightFacts): string | null {
   const remaining = Math.max(0, f.goal - f.usage);
   switch (kind) {
     case "guilt":
-      return `오늘 쇼츠에 쓴 ${minutesText(f.usage)}, 다시 돌아오지 않아요.`;
+      return `오늘 쇼츠에 쓴 ${usedText(f)}, 다시 돌아오지 않아요.`;
     case "weekly":
       return f.weekProjection < 600
         ? null
@@ -230,20 +237,20 @@ export function insightLine(kind: string, f: InsightFacts): string | null {
     case "motivate":
       return remaining < 60
         ? null
-        : `지금 멈추면 오늘 목표 안에서 끝낼 수 있어요. (${minutesText(remaining)} 남음)`;
+        : `지금 멈추면 오늘 목표 안에서 끝낼 수 있어요. (${minutesText(Math.max(1, Math.ceil(remaining / 60)) * 60)} 남음)`;
     case "future":
-      return `자기 전의 나는 오늘 이 ${minutesText(f.usage)}을 어떻게 생각할까요?`;
+      return `자기 전의 나는 오늘 이 ${usedText(f)}을 어떻게 생각할까요?`;
     case "yesterday":
       if (f.yesterdayByNow < 0 || f.usage - f.yesterdayByNow < INSIGHT_MIN_GAP_SEC) return null;
       return f.yesterdayByNow < 60
-        ? `어제 이 시간엔 거의 안 봤는데, 오늘은 벌써 ${minutesText(f.usage)}이에요.`
-        : `어제 이 시간엔 ${minutesText(f.yesterdayByNow)}이었는데, 오늘은 벌써 ${minutesText(f.usage)}이에요.`;
+        ? `어제 이 시간엔 거의 안 봤는데, 오늘은 벌써 ${usedText(f)}이에요.`
+        : `어제 이 시간엔 ${minutesText(f.yesterdayByNow)}이었는데, 오늘은 벌써 ${usedText(f)}이에요.`;
     case "average":
       return f.avg7 <= 0 || f.usage - f.avg7 < INSIGHT_MIN_GAP_SEC
         ? null
         : `최근 7일 평균보다 ${minutesText(f.usage - f.avg7)} 더 보고 있어요.`;
     case "goal":
-      return f.usage >= f.goal ? null : `정한 ${minutesText(f.goal)} 중 ${minutesText(f.usage)}을 썼어요.`;
+      return f.usage >= f.goal ? null : `정한 ${minutesText(f.goal)} 중 ${usedText(f)}을 썼어요.`;
     case "sleep":
       return f.sleepSeconds < 600
         ? null

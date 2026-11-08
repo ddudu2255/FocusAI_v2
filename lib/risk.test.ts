@@ -14,6 +14,8 @@ import {
   kept7,
   learn,
   modelState,
+  needsRelearn,
+  relearnOpenLogs,
   riskBand,
   riskScore,
   settleOpenLogs,
@@ -86,11 +88,12 @@ describe("risk model score", () => {
     assert.deepEqual(capped, same);
   });
 
-  it("splits scores into bands at 10% and 20%", () => {
-    assert.equal(riskBand(0.09), "low");
-    assert.equal(riskBand(0.1), "medium");
-    assert.equal(riskBand(0.19), "medium");
-    assert.equal(riskBand(0.2), "high");
+  it("splits scores into bands at the start model's fixed 17% and 30%", () => {
+    assert.deepEqual(START_MODEL.bands, [0.17, 0.3]);
+    assert.equal(riskBand(0.16), "low");
+    assert.equal(riskBand(0.17), "medium");
+    assert.equal(riskBand(0.29), "medium");
+    assert.equal(riskBand(0.3), "high");
   });
 
   it("rises after watching more of the goal", () => {
@@ -198,6 +201,120 @@ describe("learning on the phone", () => {
     assert.equal(result.data.openLogs[0].label, true);
     assert.equal(result.modelChanged, false);
     assert.equal(result.data.riskModel, null);
+  });
+});
+
+describe("label: watching from the open to 30 minutes after it (lr-2)", () => {
+  it("counts quick reopens in the window, so cutting viewing into pieces still counts", () => {
+    // 목표 20분 → 절반 10분. 3분씩 보고 금방 다시 연다: 열기 하나는 3분이지만 30분 안에 12분
+    const data: AppData = {
+      ...defaultData(),
+      openLogs: [open("o1", at(10, 20, 22)), open("o2", at(10, 20, 22, 5)), open("o3", at(10, 20, 22, 10)), open("o4", at(10, 20, 22, 15))],
+      usageLogs: [
+        session("s1", at(10, 20, 22), 3, "o1"),
+        session("s2", at(10, 20, 22, 5), 3, "o2"),
+        session("s3", at(10, 20, 22, 10), 3, "o3"),
+        session("s4", at(10, 20, 22, 15), 3, "o4"),
+      ],
+    };
+    const result = settleOpenLogs(data, at(10, 20, 22, 20).getTime());
+    const o1 = result.data.openLogs.find((o) => o.id === "o1");
+    assert.equal(o1?.label, true);
+    assert.equal(o1?.durationSec, 180); // 이 열기 자체에서 본 시간
+  });
+
+  it("waits until the window is over even when a later open exists", () => {
+    const data: AppData = {
+      ...defaultData(),
+      openLogs: [open("o1", at(10, 20, 22)), open("o2", at(10, 20, 22, 10))],
+      usageLogs: [session("s1", at(10, 20, 22), 2, "o1"), session("s2", at(10, 20, 22, 10), 2, "o2")],
+    };
+    // o1의 구간은 22:32까지. 그 전에는 다음 열기가 있어도 정하지 않는다.
+    assert.equal(settleOpenLogs(data, at(10, 20, 22, 20).getTime()).changed.length, 0);
+    const done = settleOpenLogs(data, at(10, 20, 22, 33).getTime());
+    assert.equal(done.data.openLogs.find((o) => o.id === "o1")?.label, false);
+  });
+
+  it("does not learn when an open held to 3 minutes is inside the window", () => {
+    const limited = { ...open("o2", at(10, 20, 22, 5)), band: "high" as const, tighten: "full" as const };
+    const data: AppData = {
+      ...defaultData(),
+      openLogs: [open("o1", at(10, 20, 22)), limited],
+      usageLogs: [session("s1", at(10, 20, 22), 2, "o1"), session("s2", at(10, 20, 22, 5), 3, "o2")],
+    };
+    const result = settleOpenLogs(data, at(10, 20, 23, 30).getTime());
+    assert.deepEqual(result.data.openLogs.map((o) => o.label), [false, false]);
+    assert.equal(result.modelChanged, false);
+  });
+
+  it("splits learning between opens that share a window", () => {
+    const one: AppData = {
+      ...defaultData(),
+      openLogs: [open("o1", at(10, 20, 22))],
+      usageLogs: [session("s1", at(10, 20, 22), 2, "o1")],
+    };
+    const two: AppData = {
+      ...one,
+      openLogs: [...one.openLogs, open("o2", at(10, 20, 22, 5))],
+      usageLogs: [...one.usageLogs, session("s2", at(10, 20, 22, 5), 2, "o2")],
+    };
+    const alone = settleOpenLogs(one, at(10, 20, 23).getTime()).data.riskModel!;
+    const shared = settleOpenLogs(two, at(10, 20, 23).getTime()).data.riskModel!;
+    const start = startState();
+    // o1 혼자면 한 번 배우고, o2와 구간을 나누면 o1은 절반만 배운다.
+    const moveAlone = Math.abs(alone.bias - start.bias);
+    const moveFirstShared = Math.abs(learn(start, open("x", at(10, 20, 22)).features, false, "", 0.5).bias - start.bias);
+    assert.ok(moveFirstShared < moveAlone);
+    assert.equal(shared.updates, 2);
+  });
+});
+
+describe("relearning once after the model changes", () => {
+  it("is needed only while an older model's state is stored", () => {
+    assert.equal(needsRelearn({ riskModel: null, openLogs: [] }), false);
+    assert.equal(needsRelearn({ riskModel: { ...startState(), version: "lr-1" }, openLogs: [] }), true);
+    assert.equal(needsRelearn({ riskModel: startState(), openLogs: [] }), false);
+    const old = { ...open("o1", at(10, 20, 22)), modelVersion: "lr-1", label: false };
+    assert.equal(needsRelearn({ riskModel: null, openLogs: [old] }), true);
+  });
+
+  it("relabels old opens with the new label and learns them from the new start", () => {
+    const old = (id: string, when: Date) => ({ ...open(id, when), modelVersion: "lr-1", label: false, durationSec: 180 });
+    const data: AppData = {
+      ...defaultData(),
+      riskModel: { ...startState(), version: "lr-1", updates: 9 },
+      openLogs: [old("o1", at(10, 20, 22)), old("o2", at(10, 20, 22, 5)), old("o3", at(10, 20, 22, 10)), old("o4", at(10, 20, 22, 15))],
+      usageLogs: [
+        session("s1", at(10, 20, 22), 3, "o1"),
+        session("s2", at(10, 20, 22, 5), 3, "o2"),
+        session("s3", at(10, 20, 22, 10), 3, "o3"),
+        session("s4", at(10, 20, 22, 15), 3, "o4"),
+      ],
+    };
+    const start = { weights: START_MODEL.weights.map((w) => w * 0.5), bias: -2 };
+    const result = relearnOpenLogs(data, start, at(10, 20, 23, 30).getTime());
+    assert.equal(result.data.riskModel?.version, START_MODEL.version);
+    assert.equal(result.data.riskModel?.updates, 4);
+    assert.deepEqual(result.data.riskModel?.start?.bias, -2);
+    // 12분 / 목표 20분: o1(22:00~22:33 구간)은 새 정답으로 오래 봄
+    assert.equal(result.data.openLogs[0].label, true);
+    assert.ok(result.changed.some((o) => o.id === "o1"));
+    assert.equal(needsRelearn(result.data), false);
+  });
+});
+
+describe("relative bands after the model changes", () => {
+  it("rescored opens from the older model with the current one instead of mixing scales", () => {
+    const now = at(10, 28, 23);
+    const older = Array.from({ length: 60 }, (_, i) => ({
+      ...open(`o${i}`, new Date(now.getTime() - (i + 1) * 3_600_000)),
+      modelVersion: "lr-1",
+      score: 0.001, // 옛 모델의 낮은 점수
+    }));
+    const [medium] = bandsFor({ openLogs: older, riskModel: null }, now);
+    // 옛 점수(0.1%)로 정했다면 바닥값 2%가 됐을 것. 지금 모델로 다시 낸 점수의 분위여야 한다.
+    const rescored = riskScore(startState(), older[0].features);
+    assert.ok(Math.abs(medium - Math.max(RELATIVE_BANDS.floor[0], rescored)) < 1e-9);
   });
 });
 
@@ -327,7 +444,7 @@ describe("policy and native rows", () => {
     const on = buildPolicy(data.settings, data);
     assert.equal(on.ai.model?.version, START_MODEL.version);
     assert.equal(on.ai.model?.kept7, DEFAULT_KEPT7);
-    assert.deepEqual(on.ai.model?.bands, [0.1, 0.2]);
+    assert.deepEqual(on.ai.model?.bands, [0.17, 0.3]);
     assert.deepEqual(on.ai.risk, { commitMax: 3, overdraftWaitSec: 10 });
     assert.ok(on.ai.tighten.high);
     const off = buildPolicy({ ...data.settings, aiEnabled: false }, data);

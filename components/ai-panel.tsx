@@ -11,6 +11,7 @@ import {
   riskHours,
   type TimeSlot,
 } from "@/lib/ai";
+import { METHOD_LABEL } from "@/lib/review";
 import { modelState } from "@/lib/risk";
 
 const SLOT_LABEL: Record<TimeSlot, string> = {
@@ -20,14 +21,12 @@ const SLOT_LABEL: Record<TimeSlot, string> = {
   night: "밤",
 };
 
-const METHOD_LABEL: Record<string, string> = {
-  pause: "5초 숨 고르기",
-  framing: "시간 체감 문구",
-  breath: "호흡 따라 하기",
-  alternative: "대체행동",
-  reflection: "성찰 질문",
-  card: "공부 카드",
-};
+/** 받침이 있으면 "이", 없으면 "가" (예: 대체행동이, 숨 고르기가). */
+function withSubject(word: string): string {
+  const last = word.charCodeAt(word.length - 1);
+  if (last < 0xac00 || last > 0xd7a3) return `${word}이(가)`;
+  return (last - 0xac00) % 28 === 0 ? `${word}가` : `${word}이`;
+}
 
 /**
  * 시간대별로 가장 잘 먹힌 방식 (기록 3번 이상인 것만).
@@ -126,7 +125,7 @@ export function AiPanel() {
             const top = best.get(slot);
             return (
               <p key={slot} className="text-muted-foreground">
-                {SLOT_LABEL[slot]}: {top ? `${METHOD_LABEL[top.arm] ?? top.arm}이(가) 잘 맞았어요 (멈춘 비율 ${Math.round(top.mean * 100)}%)` : "아직 배우는 중이에요"}
+                {SLOT_LABEL[slot]}: {top ? `${withSubject(METHOD_LABEL[top.arm] ?? top.arm)} 잘 맞았어요 (멈춘 비율 ${Math.round(top.mean * 100)}%)` : "아직 배우는 중이에요"}
               </p>
             );
           })}

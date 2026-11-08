@@ -20,6 +20,7 @@ import {
   type DayState,
 } from "@/lib/logic";
 import { homeLine } from "@/lib/compare";
+import { shownMinutes } from "@/lib/review";
 import { ladder, stageForMonth, stageHint, STAGES } from "@/lib/tree";
 import { cn } from "@/lib/utils";
 
@@ -196,7 +197,7 @@ export function HomeView() {
           <div>
             <p className="mb-0.5 text-[13px] font-semibold text-muted-foreground">오늘 사용</p>
             <p className="text-[34px] leading-none font-bold tracking-tight tabular-nums">
-              {Math.floor(usage / 60)}
+              {shownMinutes(usage, goal)}
               <small className="ml-0.5 text-[17px] font-semibold text-muted-foreground">분</small>
             </p>
           </div>

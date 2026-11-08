@@ -162,15 +162,15 @@ public class GuardRiskTest {
     @Test
     public void sheetLinesFollowActionAndReason() {
         assertEquals(null, GuardCopy.riskNotice(GuardRisk.Action.NONE, GuardRisk.Reason.TODAY));
-        assertEquals("AI · 방금 닫았다가 다시 열었어요. 3분씩 끊어서 볼게요",
+        assertEquals("방금 닫았다가 다시 열었어요. 3분씩 끊어서 볼게요",
             GuardCopy.riskNotice(GuardRisk.Action.SHORT, GuardRisk.Reason.REOPEN));
-        assertEquals("AI · 방금 길게 봤어요. 이번엔 3분씩 끊어서 볼게요",
+        assertEquals("방금 길게 봤어요. 이번엔 3분씩 끊어서 볼게요",
             GuardCopy.riskNotice(GuardRisk.Action.SHORT, GuardRisk.Reason.PREVIOUS));
-        assertEquals("AI · 방금 닫았다가 다시 열었어요. 짧게 3분은 어때요?",
+        assertEquals("방금 닫았다가 다시 열었어요. 짧게 3분은 어때요?",
             GuardCopy.riskNotice(GuardRisk.Action.SUGGEST, GuardRisk.Reason.REOPEN));
-        assertEquals("AI · 지금은 길어지기 쉬운 때라 3분씩 끊어서 볼게요",
+        assertEquals("지금은 길어지기 쉬운 때라 3분씩 끊어서 볼게요",
             GuardCopy.riskNotice(GuardRisk.Action.SHORT, GuardRisk.Reason.GENERAL));
-        assertEquals("AI · 지금은 길어지기 쉬워요. 짧게 3분은 어때요?",
+        assertEquals("지금은 길어지기 쉬워요. 짧게 3분은 어때요?",
             GuardCopy.riskNotice(GuardRisk.Action.SUGGEST, GuardRisk.Reason.GENERAL));
     }
 

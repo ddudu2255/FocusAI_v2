@@ -162,7 +162,7 @@ export function InterventionFlow({
             이유를 고르기 전에는 피드가 열리지 않습니다. 나가기는 선택 없이도
             됩니다.
             {sourceLabel
-              ? " 나가기, 강제 종료, 시간 차단을 고르면 그 화면을 닫고 ShortsAI로 돌아갑니다."
+              ? " 나가기, 강제 종료, 시간 차단을 고르면 그 화면을 닫고 Focus on으로 돌아갑니다."
               : ""}
           </p>
           <div className="mt-5 space-y-2" role="listbox" aria-label="실행 이유">

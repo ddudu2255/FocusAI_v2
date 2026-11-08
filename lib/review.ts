@@ -127,7 +127,8 @@ export function hourLabel(hour: number): string {
  * 화면에 보일 분. 목표를 넘은 날은 올림한다: 50.1분을 "50"으로 보이면서 넘은 날로 칠하지 않게.
  */
 export function shownMinutes(seconds: number, goalMinutes: number): number {
-  return seconds > goalMinutes * 60 ? Math.ceil(seconds / 60) : Math.round(seconds / 60);
+  // 목표 안이면 버림: 홈의 "N분 남았어요"(올림)와 더하면 늘 목표가 된다. 넘으면 올림: 목표 숫자 그대로 보이지 않게.
+  return seconds > goalMinutes * 60 ? Math.ceil(seconds / 60) : Math.floor(seconds / 60);
 }
 
 export type MethodResult = { type: string; total: number; stopped: number };
@@ -150,7 +151,8 @@ export function methodResults(logs: InterventionLog[]): MethodResult[] {
 
 /** 오늘 잘 통한 방법: 멈춘 비율이 가장 높은 방식 (같으면 더 많이 멈춘 쪽). */
 export function bestMethod(results: MethodResult[]): MethodResult | null {
-  const good = results.filter((r) => r.stopped > 0);
+  // 절반 이상 바로 멈춘 방식만 "잘 통한 방법"이라 부른다. 없으면 리포트에서 이 칸을 숨긴다.
+  const good = results.filter((r) => r.stopped > 0 && r.stopped / r.total >= 0.5);
   good.sort((a, b) => b.stopped / b.total - a.stopped / a.total || b.stopped - a.stopped);
   return good[0] ?? null;
 }
@@ -257,19 +259,37 @@ export function dayParts(data: AppData, date: string): DayPart[] {
   ];
 }
 
-/** 그날 한 번에 가장 길게 본 시청. 없으면 null. */
-export function longestWatch(data: AppData, date: string): { startTime: string; seconds: number } | null {
-  let best: { startTime: string; seconds: number } | null = null;
+/** 그날 본 시청을 열기(openId)별로 묶는다. 한 번 열고 이어 본 여러 구간은 하나로 센다. */
+function watchesByOpen(data: AppData, date: string): Map<string, { startTime: string; seconds: number }> {
+  const opens = new Map<string, { startTime: string; seconds: number }>();
   for (const log of data.usageLogs) {
     const seconds = secondsOnDate(log, date);
-    if (seconds > 0 && (!best || seconds > best.seconds)) best = { startTime: log.startTime, seconds };
+    if (seconds <= 0) continue;
+    const key = log.openId ?? `usage:${log.usageId}`;
+    const seen = opens.get(key);
+    if (!seen) opens.set(key, { startTime: log.startTime, seconds });
+    else {
+      seen.seconds += seconds;
+      if (log.startTime < seen.startTime) seen.startTime = log.startTime;
+    }
+  }
+  return opens;
+}
+
+/** 그날 한 번 열어서 가장 길게 본 시청 (이어 본 구간 합). 없으면 null. */
+export function longestWatch(data: AppData, date: string): { startTime: string; seconds: number } | null {
+  let best: { startTime: string; seconds: number } | null = null;
+  for (const watch of watchesByOpen(data, date).values()) {
+    if (!best || watch.seconds > best.seconds) best = watch;
   }
   return best;
 }
 
-/** 그날 연 횟수 (그날에 걸친 시청 수). */
+/** 그날 쇼츠를 연 횟수: 본 열기 + 보지 않고 바로 나간 열기. */
 export function opensOn(data: AppData, date: string): number {
-  return data.usageLogs.filter((log) => secondsOnDate(log, date) > 0).length;
+  const ids = new Set(watchesByOpen(data, date).keys());
+  for (const open of data.openLogs ?? []) if (open.date === date) ids.add(open.id);
+  return ids.size;
 }
 
 /** 최근 14일 동안 위험 높음으로 본 열기가 가장 많았던 시. 3번 미만이면 null. */

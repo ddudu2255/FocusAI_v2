@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useStore } from "@/components/store";
 import { HanbakjaGuard, isGuardTarget, isNativeAndroid } from "@/lib/guard";
-import { todayKey, webSecondsOn } from "@/lib/logic";
+import { goalMinutesOn, todayKey, webSecondsOn } from "@/lib/logic";
 import { riskHours, hourLabel } from "@/lib/ai";
 import { onNotificationAction, scheduleRiskNotice } from "@/lib/notify";
 import { buildPolicy, cardsForService } from "@/lib/policy";
@@ -74,7 +74,7 @@ export function GuardBridge() {
         const today = todayKey();
         const batch = await HanbakjaGuard.sync({
           level1Threshold: data.settings.level1Threshold,
-          level3Threshold: data.settings.level3Threshold,
+          level3Threshold: goalMinutesOn(data, today),
           webDate: today,
           webSeconds: webSecondsOn(data, today),
           policy: buildPolicy(data.settings, data),

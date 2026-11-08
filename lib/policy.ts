@@ -1,5 +1,5 @@
 import { banditTables, HABITUATION, hourLabel, riskHours, tightenTable, type BetaTable } from "./ai.ts";
-import { FRAMINGS, usageStats } from "./logic.ts";
+import { FRAMINGS, goalMinutesOn, todayKey, usageStats } from "./logic.ts";
 import { sheetCompare } from "./compare.ts";
 import { bandsFor, keepingGoal, kept7, modelState } from "./risk.ts";
 import { START_MODEL } from "./risk-model.ts";
@@ -12,7 +12,13 @@ import type { AppData, Settings, StudyCard } from "./types.ts";
  */
 export type Policy = {
   version: string;
+  /** 오늘 판정에 쓰는 목표(분). 앱 홈·리포트와 같은 값 (logic.ts goalMinutesOn). */
   goalMinutes: number;
+  /**
+   * 내일 이후부터 적용될 목표 (오늘 이미 본 시간보다 낮춘 경우). 앱을 열지 않아도 날이 바뀌면
+   * 서비스가 이 값으로 넘어간다. 없으면 null.
+   */
+  goalNext: { from: string; minutes: number } | null;
   /** 목표 대비 비율: 이 이상이면 중간 / 강함 */
   mediumAt: number;
   strongAt: number;
@@ -100,7 +106,19 @@ export const AI_POLICY_VERSION = "ai-1";
 /** AI + 밴딧 학습 개선 (v0.9.1). 기록의 policyVersion으로 전후를 나눠 본다. */
 export const AI_SHARED_POLICY_VERSION = "ai-2";
 /** AI + 예측 모델 (v0.11). 밴딧 학습 개선(ai-2) 위에 위험도 예측을 더한다. */
-export const AI_RISK_POLICY_VERSION = "ai-3";
+export const AI_RISK_POLICY_VERSION = "ai-4";
+
+/**
+ * 내일 판정 목표가 오늘과 다르면 그 값. 목표를 낮췄는데 오늘 이미 더 봤을 때(내일부터 적용)와
+ * 오늘 목표를 올렸을 때(오늘은 원래 목표, 내일부터 새 목표) 둘 다 해당한다.
+ */
+function nextGoalChange(data: AppData, now: Date): Policy["goalNext"] {
+  const today = goalMinutesOn(data, todayKey(now));
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const from = todayKey(next);
+  const minutes = goalMinutesOn(data, from);
+  return minutes !== today ? { from, minutes } : null;
+}
 
 export function buildPolicy(settings: Settings, data?: AppData, now = new Date()): Policy {
   const stats = data
@@ -131,7 +149,8 @@ export function buildPolicy(settings: Settings, data?: AppData, now = new Date()
       : settings.banditV2
         ? AI_RISK_POLICY_VERSION
         : AI_POLICY_VERSION,
-    goalMinutes: settings.level3Threshold,
+    goalMinutes: data ? goalMinutesOn(data, todayKey(now)) : settings.level3Threshold,
+    goalNext: data ? nextGoalChange(data, now) : null,
     mediumAt: 0.5,
     strongAt: 1,
     methods: {

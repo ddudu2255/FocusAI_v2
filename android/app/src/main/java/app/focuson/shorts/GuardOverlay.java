@@ -13,6 +13,7 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import java.util.List;
 
@@ -220,6 +221,8 @@ final class GuardOverlay {
         for (int i = 0; i < items.size(); i += columns) {
             LinearLayout row = new LinearLayout(context);
             row.setOrientation(LinearLayout.HORIZONTAL);
+            // 두 줄 버튼("3분 · 추천" 두 줄)이 한 줄 버튼과 글자 기준선을 맞추느라 아래로 밀리지 않게.
+            row.setBaselineAligned(false);
             for (int j = i; j < i + columns; j++) {
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(heightDp), 1f);
                 lp.setMargins(j == i ? 0 : dp(4), dp(4), j == i + columns - 1 ? 0 : dp(4), dp(4));
@@ -297,12 +300,26 @@ final class GuardOverlay {
         int pad = dp(20);
         sheet.setPadding(pad, pad, pad, pad);
 
+        // 위쪽 내용은 길어지면(긴 해설 등) 스크롤하고, "나가기"는 늘 화면 안 같은 자리에 둔다.
+        LinearLayout content = vertical();
+        int maxContent = context.getResources().getDisplayMetrics().heightPixels - dp(220);
+        ScrollView scroll = new ScrollView(context) {
+            @Override
+            protected void onMeasure(int widthSpec, int heightSpec) {
+                super.onMeasure(widthSpec, MeasureSpec.makeMeasureSpec(maxContent, MeasureSpec.AT_MOST));
+            }
+        };
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.addView(content, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        sheet.addView(scroll, matchWrap());
+
         noticeText = text("", 13, TEXT, true);
         noticeText.setPadding(0, 0, 0, dp(6));
         noticeText.setVisibility(View.GONE);
-        sheet.addView(noticeText);
+        content.addView(noticeText);
         gaugeText = text("", 13, MUTED, true);
-        sheet.addView(gaugeText);
+        content.addView(gaugeText);
         LinearLayout bar = new LinearLayout(context);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setBackground(rounded(TRACK, dp(3), false));
@@ -312,17 +329,17 @@ final class GuardOverlay {
         bar.addView(gaugeRest, new LinearLayout.LayoutParams(0, dp(6), 0.98f));
         LinearLayout.LayoutParams barLp = matchWrap();
         barLp.setMargins(0, dp(6), 0, dp(12));
-        sheet.addView(bar, barLp);
+        content.addView(bar, barLp);
 
         title = text("", 22, TEXT, true);
-        sheet.addView(title);
+        content.addView(title);
         subtitle = text("", 14, MUTED, false);
         subtitle.setPadding(0, dp(4), 0, 0);
-        sheet.addView(subtitle);
+        content.addView(subtitle);
         body = vertical();
         LinearLayout.LayoutParams bodyLp = matchWrap();
         bodyLp.setMargins(0, dp(14), 0, 0);
-        sheet.addView(body, bodyLp);
+        content.addView(body, bodyLp);
         leaveButton = button("나가기", false);
         LinearLayout.LayoutParams leaveLp = matchHeight(52);
         leaveLp.setMargins(0, dp(12), 0, 0);
@@ -353,10 +370,24 @@ final class GuardOverlay {
             return;
         }
         sheet.setTranslationY(dp(600));
+        View shown = root;
         sheet.post(() -> {
             sheet.setTranslationY(sheet.getHeight());
             sheet.animate().translationY(0f).setDuration(ANIM_MS).start();
             scrim.animate().alpha(SCRIM_ALPHA).setDuration(ANIM_MS).start();
         });
+        // 안전장치: 올라오는 애니메이션이 돌지 않으면 시트가 화면 밖에 남은 채 터치만 막는다
+        // (2026-11-07 폰에서 "정한 1분이 됐어요"가 안 보인 일). 시간이 지나면 제자리에 바로 놓는다.
+        handler.postDelayed(() -> {
+            if (root != shown || closing) return;
+            if (sheet.getTranslationY() != 0f || scrim.getAlpha() < SCRIM_ALPHA) {
+                sheet.animate().cancel();
+                scrim.animate().cancel();
+                sheet.setTranslationY(0f);
+                scrim.setAlpha(SCRIM_ALPHA);
+                root.requestLayout();
+                root.invalidate();
+            }
+        }, ANIM_MS + 400);
     }
 }

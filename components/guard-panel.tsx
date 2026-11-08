@@ -126,8 +126,9 @@ export function GuardPanel() {
       <p className="text-sm leading-6 text-muted-foreground">
         안드로이드에서 접근성 서비스를 직접 켜면, YouTube Shorts와 Instagram Reels
         플레이어가 열릴 때 영상을 멈추고 그 위에 같은 질문이 올라옵니다. 오늘 목표의
-        절반까지는 이유와 볼 시간만 정하고, 절반을 넘으면 숨 고르기·문제 하나 같은 멈추는
-        활동을 거칩니다. 정한 시간이 되면 다시 멈춥니다. 목표를 넘으면 오늘을 마무리할지,
+        절반까지는 5초 숨 고르기나 시간 문구 한 줄로 가볍게 멈춘 뒤 이유와 볼 시간을
+        정하고, 절반을 넘으면 호흡 따라 하기·문제 하나 같은 조금 더 긴 활동도 섞여
+        나옵니다. 정한 시간이 되면 다시 멈춥니다. 목표를 넘으면 오늘을 마무리할지,
         잠시 잠글지 고릅니다. 잠금 중에 쇼츠나 릴스를 열면 남은 시간이 보이는 잠금 화면이
         뜹니다. 일반 영상, 홈 피드, 검색에서는 개입하지 않습니다.
       </p>
@@ -142,17 +143,17 @@ export function GuardPanel() {
         <li>아래 버튼을 누르거나 휴대폰의 설정 앱을 엽니다.</li>
         <li>
           <strong className="font-medium text-foreground">설정 → 접근성</strong>으로
-          이동합니다. ShortsAI가 바로 없으면{" "}
+          이동합니다. Focus on이 바로 없으면{" "}
           <strong className="font-medium text-foreground">설치된 앱</strong> 또는{" "}
           <strong className="font-medium text-foreground">다운로드한 앱</strong>을
           엽니다.
         </li>
-        <li>ShortsAI를 켜고, 확인 창에서 허용을 누릅니다.</li>
+        <li>Focus on을 켜고, 확인 창에서 허용을 누릅니다.</li>
       </ol>
       <p className="text-sm leading-6 text-muted-foreground">
         안드로이드 13 이상에서는 그 전에{" "}
         <strong className="font-medium text-foreground">
-          설정 → 앱 → ShortsAI → 오른쪽 위 ⋮ → 제한된 설정 허용
+          설정 → 앱 → Focus on → 오른쪽 위 ⋮ → 제한된 설정 허용
         </strong>
         이 필요할 수 있습니다.
       </p>

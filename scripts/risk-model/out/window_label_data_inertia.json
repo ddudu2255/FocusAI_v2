@@ -1,0 +1,389 @@
+{
+  "old (한 번 열기, 절반)": {
+    "long_rate": 0.086,
+    "auc": 0.815,
+    "rule_auc": 0.589,
+    "coef_today_opens": -0.436,
+    "coef_recent30": null,
+    "coef_since_close": -0.504,
+    "coef_today_ratio": 0.818,
+    "coef_prev": 0.189,
+    "top": [
+      [
+        "today_ratio",
+        0.818
+      ],
+      [
+        "log_min_since_close",
+        -0.504
+      ],
+      [
+        "log_today_opens",
+        -0.436
+      ],
+      [
+        "reason_2",
+        -0.367
+      ],
+      [
+        "kept7",
+        -0.253
+      ]
+    ],
+    "fixed_bands": [
+      0.087,
+      0.185
+    ],
+    "old_fixed_share_high": 0.042,
+    "old_fixed_share_medium": 0.088,
+    "per_persona": {
+      "A_night": {
+        "long_rate": 0.176,
+        "auc": 0.729
+      },
+      "B_habit": {
+        "long_rate": 0.063,
+        "auc": 0.806
+      },
+      "C_stress": {
+        "long_rate": 0.121,
+        "auc": 0.846
+      },
+      "D_weekend": {
+        "long_rate": 0.107,
+        "auc": 0.851
+      },
+      "E_trying": {
+        "long_rate": 0.039,
+        "auc": 0.737
+      },
+      "F_rebound": {
+        "long_rate": 0.124,
+        "auc": 0.831
+      }
+    }
+  },
+  "old + 최근30분 입력": {
+    "long_rate": 0.086,
+    "auc": 0.815,
+    "rule_auc": 0.589,
+    "coef_today_opens": -0.427,
+    "coef_recent30": -0.036,
+    "coef_since_close": -0.53,
+    "coef_today_ratio": 0.814,
+    "coef_prev": 0.179,
+    "top": [
+      [
+        "today_ratio",
+        0.814
+      ],
+      [
+        "log_min_since_close",
+        -0.53
+      ],
+      [
+        "log_today_opens",
+        -0.427
+      ],
+      [
+        "reason_2",
+        -0.367
+      ],
+      [
+        "kept7",
+        -0.253
+      ]
+    ],
+    "fixed_bands": [
+      0.087,
+      0.182
+    ],
+    "old_fixed_share_high": 0.041,
+    "old_fixed_share_medium": 0.086,
+    "per_persona": {
+      "A_night": {
+        "long_rate": 0.176,
+        "auc": 0.729
+      },
+      "B_habit": {
+        "long_rate": 0.063,
+        "auc": 0.806
+      },
+      "C_stress": {
+        "long_rate": 0.121,
+        "auc": 0.847
+      },
+      "D_weekend": {
+        "long_rate": 0.107,
+        "auc": 0.851
+      },
+      "E_trying": {
+        "long_rate": 0.039,
+        "auc": 0.738
+      },
+      "F_rebound": {
+        "long_rate": 0.124,
+        "auc": 0.832
+      }
+    }
+  },
+  "C (30분 묶음, 0.50)": {
+    "long_rate": 0.159,
+    "auc": 0.783,
+    "rule_auc": 0.576,
+    "coef_today_opens": -0.479,
+    "coef_recent30": null,
+    "coef_since_close": -0.467,
+    "coef_today_ratio": 0.755,
+    "coef_prev": 0.178,
+    "top": [
+      [
+        "today_ratio",
+        0.755
+      ],
+      [
+        "log_today_opens",
+        -0.479
+      ],
+      [
+        "log_min_since_close",
+        -0.467
+      ],
+      [
+        "kept7",
+        -0.184
+      ],
+      [
+        "prev_duration_ratio",
+        0.178
+      ]
+    ],
+    "fixed_bands": [
+      0.17,
+      0.3
+    ],
+    "old_fixed_share_high": 0.114,
+    "old_fixed_share_medium": 0.241,
+    "per_persona": {
+      "A_night": {
+        "long_rate": 0.279,
+        "auc": 0.709
+      },
+      "B_habit": {
+        "long_rate": 0.147,
+        "auc": 0.801
+      },
+      "C_stress": {
+        "long_rate": 0.174,
+        "auc": 0.82
+      },
+      "D_weekend": {
+        "long_rate": 0.227,
+        "auc": 0.776
+      },
+      "E_trying": {
+        "long_rate": 0.095,
+        "auc": 0.627
+      },
+      "F_rebound": {
+        "long_rate": 0.196,
+        "auc": 0.78
+      }
+    },
+    "also_old": 0.541
+  },
+  "C (0.50) + 최근30분 입력": {
+    "long_rate": 0.159,
+    "auc": 0.783,
+    "rule_auc": 0.576,
+    "coef_today_opens": -0.493,
+    "coef_recent30": 0.07,
+    "coef_since_close": -0.418,
+    "coef_today_ratio": 0.761,
+    "coef_prev": 0.195,
+    "top": [
+      [
+        "today_ratio",
+        0.761
+      ],
+      [
+        "log_today_opens",
+        -0.493
+      ],
+      [
+        "log_min_since_close",
+        -0.418
+      ],
+      [
+        "prev_duration_ratio",
+        0.195
+      ],
+      [
+        "kept7",
+        -0.185
+      ]
+    ],
+    "fixed_bands": [
+      0.171,
+      0.301
+    ],
+    "old_fixed_share_high": 0.116,
+    "old_fixed_share_medium": 0.239,
+    "per_persona": {
+      "A_night": {
+        "long_rate": 0.279,
+        "auc": 0.71
+      },
+      "B_habit": {
+        "long_rate": 0.147,
+        "auc": 0.801
+      },
+      "C_stress": {
+        "long_rate": 0.174,
+        "auc": 0.82
+      },
+      "D_weekend": {
+        "long_rate": 0.227,
+        "auc": 0.776
+      },
+      "E_trying": {
+        "long_rate": 0.095,
+        "auc": 0.625
+      },
+      "F_rebound": {
+        "long_rate": 0.196,
+        "auc": 0.78
+      }
+    }
+  },
+  "C (30분 묶음, 0.33)": {
+    "long_rate": 0.224,
+    "auc": 0.736,
+    "rule_auc": 0.563,
+    "coef_today_opens": -0.495,
+    "coef_recent30": null,
+    "coef_since_close": -0.386,
+    "coef_today_ratio": 0.637,
+    "coef_prev": 0.172,
+    "top": [
+      [
+        "today_ratio",
+        0.637
+      ],
+      [
+        "log_today_opens",
+        -0.495
+      ],
+      [
+        "log_min_since_close",
+        -0.386
+      ],
+      [
+        "prev_duration_ratio",
+        0.172
+      ],
+      [
+        "yesterday_by_now_ratio",
+        0.136
+      ]
+    ],
+    "fixed_bands": [
+      0.251,
+      0.38
+    ],
+    "old_fixed_share_high": 0.267,
+    "old_fixed_share_medium": 0.499,
+    "per_persona": {
+      "A_night": {
+        "long_rate": 0.324,
+        "auc": 0.687
+      },
+      "B_habit": {
+        "long_rate": 0.197,
+        "auc": 0.756
+      },
+      "C_stress": {
+        "long_rate": 0.238,
+        "auc": 0.779
+      },
+      "D_weekend": {
+        "long_rate": 0.337,
+        "auc": 0.703
+      },
+      "E_trying": {
+        "long_rate": 0.199,
+        "auc": 0.595
+      },
+      "F_rebound": {
+        "long_rate": 0.269,
+        "auc": 0.728
+      }
+    },
+    "also_old": 0.383
+  },
+  "C (30분 묶음, 0.25)": {
+    "long_rate": 0.294,
+    "auc": 0.697,
+    "rule_auc": 0.554,
+    "coef_today_opens": -0.478,
+    "coef_recent30": null,
+    "coef_since_close": -0.331,
+    "coef_today_ratio": 0.543,
+    "coef_prev": 0.16,
+    "top": [
+      [
+        "today_ratio",
+        0.543
+      ],
+      [
+        "log_today_opens",
+        -0.478
+      ],
+      [
+        "log_min_since_close",
+        -0.331
+      ],
+      [
+        "prev_duration_ratio",
+        0.16
+      ],
+      [
+        "yesterday_by_now_ratio",
+        0.135
+      ]
+    ],
+    "fixed_bands": [
+      0.334,
+      0.453
+    ],
+    "old_fixed_share_high": 0.594,
+    "old_fixed_share_medium": 0.396,
+    "per_persona": {
+      "A_night": {
+        "long_rate": 0.376,
+        "auc": 0.665
+      },
+      "B_habit": {
+        "long_rate": 0.261,
+        "auc": 0.714
+      },
+      "C_stress": {
+        "long_rate": 0.303,
+        "auc": 0.731
+      },
+      "D_weekend": {
+        "long_rate": 0.446,
+        "auc": 0.656
+      },
+      "E_trying": {
+        "long_rate": 0.307,
+        "auc": 0.578
+      },
+      "F_rebound": {
+        "long_rate": 0.361,
+        "auc": 0.671
+      }
+    },
+    "also_old": 0.292
+  }
+}

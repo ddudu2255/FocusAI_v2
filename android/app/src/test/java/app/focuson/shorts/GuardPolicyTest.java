@@ -54,4 +54,13 @@ public class GuardPolicyTest {
         cal.set(2026, Calendar.OCTOBER, 7, 6, 0, 0);
         assertEquals(cal.getTimeInMillis(), policy.nextDayEnd(lateNight, SEOUL));
     }
+
+    @Test
+    public void loweredGoalStartsOnItsDayEvenWithoutTheApp() {
+        // 오늘 이미 본 시간보다 낮춘 목표는 내일부터 (앱 홈·리포트와 같은 규칙)
+        assertEquals(30, GuardPolicy.goalOn(30, "2026-11-09", 15, "2026-11-08"));
+        assertEquals(15, GuardPolicy.goalOn(30, "2026-11-09", 15, "2026-11-09"));
+        assertEquals(15, GuardPolicy.goalOn(30, "2026-11-09", 15, "2026-11-12"));
+        assertEquals(30, GuardPolicy.goalOn(30, "", 0, "2026-11-12"));
+    }
 }

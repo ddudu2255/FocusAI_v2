@@ -222,12 +222,22 @@ describe("review: report", () => {
     assert.equal(opensOn(data, key(28)), 3);
     assert.equal(longestWatch(data, key(20)), null);
   });
+
+  it("counts one open with several watched parts once, and opens left right away", () => {
+    const a1 = { ...session("a1", 28, 9, 4), openId: "o1" };
+    const a2 = { ...session("a2", 28, 10, 3), openId: "o1" };
+    const b = { ...session("b", 28, 11, 5), openId: "o2" };
+    const exitOnly = { id: "o3", date: key(28) } as AppData["openLogs"][number];
+    const data = { ...defaultData(), usageLogs: [a1, a2, b], openLogs: [exitOnly] };
+    assert.equal(opensOn(data, key(28)), 3);
+    assert.deepEqual(longestWatch(data, key(28)), { startTime: local(28, 9), seconds: 7 * 60 });
+  });
 });
 
 describe("review: fixes from the phone test", () => {
   it("rounds an over-goal day up so it never shows the goal itself", () => {
     assert.equal(shownMinutes(50 * 60 + 6, 50), 51);
-    assert.equal(shownMinutes(49 * 60 + 40, 50), 50);
+    assert.equal(shownMinutes(49 * 60 + 40, 50), 49); // 목표 안은 버림 (남은 1분과 더해 50)
     assert.equal(shownMinutes(30 * 60 + 20, 50), 30);
   });
 

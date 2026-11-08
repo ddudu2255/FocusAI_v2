@@ -35,7 +35,8 @@ import {
 import { backend, loadWithFallback, type Op } from "@/lib/persist";
 import type { CompareStats } from "@/lib/compare";
 import { applyOnboarding, skipOnboarding, type Cluster } from "@/lib/onboarding";
-import { settleOpenLogs } from "@/lib/risk";
+import { CLUSTERS } from "@/lib/clusters";
+import { needsRelearn, relearnOpenLogs, settleOpenLogs } from "@/lib/risk";
 import { requestServerDelete } from "@/lib/sync-runner";
 import { clearData, defaultData } from "@/lib/storage";
 import type {
@@ -151,9 +152,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const load = useCallback(async () => {
     try {
       const loaded = await loadWithFallback();
-      dataRef.current = loaded.corrupt ? null : loaded.data;
+      let data = loaded.data;
+      // 예측 모델이 바뀐 업데이트 뒤 한 번: 쌓인 열기를 새 정답으로 다시 매기고 새 시작 모델에서 다시 배운다.
+      if (!loaded.corrupt && needsRelearn(data)) {
+        const cluster = CLUSTERS.find((c) => c.id === data.settings.cluster);
+        const relearned = relearnOpenLogs(data, cluster ? cluster.model : null);
+        data = relearned.data;
+        await backend().apply(data, [
+          ...relearned.changed.map((row) => ({ kind: "open" as const, row })),
+          { kind: "riskModel" as const, state: data.riskModel },
+        ]);
+      }
+      dataRef.current = loaded.corrupt ? null : data;
       setCorrupt(loaded.corrupt);
-      setData(loaded.corrupt ? null : loaded.data);
+      setData(loaded.corrupt ? null : data);
       setStorageKind(backend().kind);
       setSaveError(loaded.fallback ? FALLBACK_ERROR : null);
     } catch {
@@ -581,7 +593,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (result === "unsupported") return "이 기기에서는 알림을 쓸 수 없습니다.";
     if (result === "denied") {
       return isNativeAndroid()
-        ? "알림이 꺼져 있습니다. 휴대폰 설정 → 애플리케이션 → ShortsAI → 알림에서 허용해 주세요."
+        ? "알림이 꺼져 있습니다. 휴대폰 설정 → 애플리케이션 → Focus on → 알림에서 허용해 주세요."
         : "알림이 차단되어 있습니다. 브라우저 사이트 설정에서 허용해 주세요.";
     }
     if (result !== "granted") return "알림 권한을 허용하지 않았습니다.";
