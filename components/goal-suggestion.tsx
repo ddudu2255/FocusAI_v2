@@ -28,7 +28,7 @@ export function GoalSuggestionCard() {
 
   return (
     <section className="space-y-3 rounded-3xl bg-secondary px-5 py-4">
-      <p className="text-xs font-medium text-muted-foreground">AI 이번 주 제안</p>
+      <p className="text-xs font-medium text-muted-foreground">이번 주 제안</p>
       {suggestion.reduce ? (
         <>
           <p className="text-base leading-7">

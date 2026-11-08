@@ -16,7 +16,7 @@
  *
  * 원칙: 강도 단계는 규칙 그대로. AI는 방식·문구·세부 수치·제안만 바꾼다. 잠금은 사람이 확정.
  */
-import { hourlyUsage, lastDates, todayKey, usageSecondsOn } from "./logic.ts";
+import { firstRecordDate, goalMinutesOn, hourlyUsage, lastDates, todayKey, usageSecondsOn } from "./logic.ts";
 import type { AppData, InterventionLog, UsageLog } from "./types.ts";
 
 /** 밴딧이 보는 기록 기간 */
@@ -386,10 +386,11 @@ export function goalSuggestion(data: AppData, now = new Date()): GoalSuggestion 
   const [y, m, d] = week.split("-").map(Number);
   const lastSunday = new Date(y, m - 1, d - 1);
   const lastWeek = lastDates(7, lastSunday);
-  const recorded = new Set(data.usageLogs.map((log) => log.date));
+  // 이번 달 나무와 같은 규칙: 설치한 날 이후, 그날의 목표 이하면 지킨 날 (0분 본 날 포함)
+  const first = firstRecordDate(data);
   const goal = data.settings.level3Threshold;
   const keptDays = lastWeek.filter(
-    (day) => recorded.has(day) && usageSecondsOn(data, day) <= goal * 60,
+    (day) => first !== null && day >= first && usageSecondsOn(data, day) <= goalMinutesOn(data, day) * 60,
   ).length;
   if (keptDays < 5) return null;
   const floor = Math.max(5, Math.min(data.settings.finalGoal, goal));

@@ -344,6 +344,17 @@ describe("weekly goal suggestion", () => {
     assert.equal(hold?.reduce, false);
   });
 
+  it("counts a day with no Shorts at all as kept, like the month tree", () => {
+    // 월·화·목·일은 0분, 나머지는 목표 안: 7일 모두 지킨 날
+    const watched = [6, 9, 10].map((d) => session(`z${d}`, at(10, d, 20), 10));
+    const data = { ...defaultData(), usageLogs: [session("start", at(10, 1, 20), 5), ...watched] };
+    const s = goalSuggestion(data, monday);
+    assert.equal(s?.keptDays, 7);
+    // 설치 전 날은 세지 않는다 (목요일 설치: 목~일 4일뿐)
+    const late = { ...defaultData(), usageLogs: [session("late", at(10, 8, 20), 5)] };
+    assert.equal(goalSuggestion(late, monday), null);
+  });
+
   it("does not tighten after a missed week", () => {
     const data = {
       ...defaultData(),
