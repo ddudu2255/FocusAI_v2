@@ -246,6 +246,11 @@ export type BlockState = {
 export type GoalChange = {
   from: string;
   minutes: number;
+  /**
+   * 시연 모드에서 바꾼 목표: 그날부터 이 값 그대로 판정한다 (오늘 이미 본 시간과 상관없이,
+   * 올려도 바로). 보통 변경은 없음 = 그날은 더 작은 목표로 판정.
+   */
+  exact?: boolean;
 };
 
 export type AppData = {

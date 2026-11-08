@@ -379,7 +379,7 @@ export function readGoalLog(value: unknown): GoalChange[] {
     if (typeof raw.from !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(raw.from)) return [];
     const minutes = Number(raw.minutes);
     if (!Number.isFinite(minutes) || minutes < 1 || minutes > 360) return [];
-    return [{ from: raw.from, minutes: Math.round(minutes) }];
+    return [{ from: raw.from, minutes: Math.round(minutes), ...(raw.exact === true ? { exact: true } : {}) }];
   });
 }
 

@@ -825,6 +825,22 @@ describe("goal by date", () => {
     assert.equal(nextGoalLog(defaultData(), 20), null);
   });
 
+  it("in demo mode a goal change applies right away, up or down", () => {
+    const demo = (d: AppData): AppData => ({ ...d, settings: { ...d.settings, demoMode: true } });
+    let data: AppData = demo({ ...defaultData(), usageLogs: [seen(1, 15)] });
+    data = withGoal(data, 60, at(1, 8));
+    data = withGoal(data, 10, at(1, 10)); // 이미 15분 봤어도 바로 10분 (보통은 내일부터)
+    assert.equal(goalMinutesOn(data, "2026-10-01"), 10);
+    data = withGoal(data, 60, at(1, 11)); // 올려도 바로 60분 (보통은 오늘은 작은 값)
+    assert.equal(goalMinutesOn(data, "2026-10-01"), 60);
+    assert.equal(goalMinutesOn(data, "2026-10-02"), 60);
+    // 시연 모드를 끈 뒤의 보통 변경은 다시 보통 규칙
+    data = { ...data, settings: { ...data.settings, demoMode: false } };
+    data = withGoal(data, 90, at(1, 12));
+    assert.equal(goalMinutesOn(data, "2026-10-01"), 60);
+    assert.equal(goalMinutesOn(data, "2026-10-02"), 90);
+  });
+
   it("a lowered goal does not change earlier days", () => {
     let data: AppData = { ...defaultData(), usageLogs: [seen(1, 47)] };
     data = withGoal(data, 50, at(1, 8)); // 1일 아침에 50분으로

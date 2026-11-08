@@ -938,6 +938,7 @@ export function goalMinutesOn(data: AppData, date: string): number {
   let start: number | null = null;
   let startFrom = "";
   const sameDay: number[] = [];
+  let exact: number | null = null;
   for (const change of log) {
     if (change.from < date) {
       if (change.from >= startFrom) {
@@ -945,9 +946,16 @@ export function goalMinutesOn(data: AppData, date: string): number {
         start = change.minutes;
       }
     } else if (change.from === date) {
-      sameDay.push(change.minutes);
+      if (change.exact) {
+        // 시연 모드 변경: 그 값에서 다시 시작한다 (앞의 같은 날 변경은 무시)
+        exact = change.minutes;
+        sameDay.length = 0;
+      } else {
+        sameDay.push(change.minutes);
+      }
     }
   }
+  if (exact !== null) return Math.max(1, Math.min(exact, ...sameDay));
   if (start === null) {
     // 모든 기록이 이 날 이후: 가장 이른 기록을 쓴다.
     start = [...log].sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))[0].minutes;
@@ -970,6 +978,11 @@ export function nextGoalLog(data: AppData, newGoal: number, now = new Date()): G
   const today = todayKey(now);
   const log: GoalChange[] =
     data.goalLog.length > 0 ? [...data.goalLog] : [{ from: GOAL_SINCE_START, minutes: oldGoal }];
+  if (data.settings.demoMode) {
+    // 시연 모드: 올리든 낮추든 그 자리에서 바로 (앱 화면과 시트 모두)
+    log.push({ from: today, minutes: newGoal, exact: true });
+    return log;
+  }
   const lowerThanWatched = newGoal < oldGoal && usageSecondsOn(data, today) > newGoal * 60;
   log.push({ from: lowerThanWatched ? addDays(today, 1) : today, minutes: newGoal });
   return log;
